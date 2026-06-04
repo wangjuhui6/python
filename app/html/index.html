@@ -1,0 +1,20 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>CesiumLab Python</title>
+</head>
+<body>
+    <h1>CesiumLab Python 桌面版</h1>
+    <button onclick="loadData()">测试接口</button>
+    <p id="result"></p>
+
+    <script>
+        async function loadData() {
+            const res = await fetch('/api/base');
+            const data = await res.json();
+            document.getElementById('result').innerText = data.message;
+        }
+    </script>
+</body>
+</html>

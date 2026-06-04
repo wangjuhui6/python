@@ -1,0 +1,4 @@
+app/build/
+app/dist/
+app/api/__pycache__/
+app/api/routers/
