@@ -7,6 +7,7 @@ a = Analysis(
     binaries=[],
     datas=[
         ('html', 'html'),
+        ('tools', 'tools'),
         ('icon.ico', '.'),
     ],
     hiddenimports=[],
