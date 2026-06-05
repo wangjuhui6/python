@@ -1,0 +1,1 @@
+import{r as e,s as t,u as n}from"./index-Cb9_ly4o.js";var r={};function i(e,r){return n(),t(`div`,null,`矢量数据`)}var a=e(r,[[`render`,i]]);export{a as default};

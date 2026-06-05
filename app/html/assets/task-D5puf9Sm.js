@@ -1,0 +1,1 @@
+import{r as e,s as t,u as n}from"./index-f-emndL0.js";var r={};function i(e,r){return n(),t(`div`,null,` 接口测试 `)}var a=e(r,[[`render`,i]]);export{a as default};

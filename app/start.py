@@ -7,14 +7,7 @@ from PIL import Image
 from pystray import MenuItem as item
 import os
 import sys
-
-HOST = 'localhost'
-PORT = 21006
-
-def get_request_path(relative_path: str):
-  # 获取资源文件
-  base_path = os.path.dirname(os.path.abspath(__file__))
-  return os.path.join(base_path, relative_path)
+from base import HOST, PORT, get_request_path
 
 # 启动 FastAPI 服务
 def run_server():

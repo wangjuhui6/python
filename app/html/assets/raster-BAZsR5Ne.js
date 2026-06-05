@@ -1,0 +1,1 @@
+import{r as e,s as t,u as n}from"./index-CGR_CUFW.js";var r={};function i(e,r){return n(),t(`div`,null,`栅格数据，测试路由使用，不一定会做这个功能`)}var a=e(r,[[`render`,i]]);export{a as default};
