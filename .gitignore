@@ -5,3 +5,4 @@ app/api/routers/
 app/__pycache__/
 app/html/
 app/tools/
+app/utils/__pycache__/
