@@ -6,3 +6,6 @@ app/__pycache__/
 app/html/
 app/tools/
 app/utils/__pycache__/
+app/data/__pycache__/
+app/server/__pycache__/
+app/sql/

@@ -34,6 +34,8 @@ export const dataTypes = {
   xz: [['XZ', '*.xz']],
   lzma: [['LZMA', '*.lzma']],
   lz4: [['LZ4', '*.lz4']],
+  mbtiles: [['MBTiles', '*.mbtiles']],
+  osmPbf: [['OSM PBF', '*.pbf']],
 }
 
 // 选择文件

@@ -3,12 +3,4 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted, ref } from 'vue'
-import axios from 'axios'
-
-onMounted(() => {
-  axios.get('/api/data').then(res => {
-    console.log(res)
-  })
-})
 </script>

@@ -8,3 +8,12 @@ export async function geojsonToShp(data: any): Promise<string> {
     data
   })
 }
+
+// osm pbf转mbtiles
+export async function osmPbfToMbtiles(data: any): Promise<string> {
+  return await service({
+    url: '/gdal/osmPbfToMbtiles',
+    method: 'post',
+    data
+  })
+}

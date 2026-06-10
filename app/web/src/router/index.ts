@@ -32,6 +32,14 @@ export const routes: any[] = [
           title: '栅格数据处理'
         },
         component: () => import('../views/data/raster.vue')
+      },
+      {
+        path: '/data/record',
+        name: 'record',
+        meta: {
+          title: '记录管理'
+        },
+        component: () => import('../views/data/record.vue')
       }
     ]
   },

@@ -2,7 +2,7 @@ from fastapi import FastAPI
 from fastapi import APIRouter
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
-from .routers import base, data, gdal, tkinter
+from .routers import base, data, gdal, tkinter, record
 import os
 
 api = FastAPI()
@@ -13,6 +13,7 @@ api_router.include_router(base.router)
 api_router.include_router(data.router)
 api_router.include_router(gdal.router)
 api_router.include_router(tkinter.router)
+api_router.include_router(record.router)
 
 api.include_router(api_router)
 
