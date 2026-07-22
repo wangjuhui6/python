@@ -48,3 +48,12 @@ coll = COLLECT(
     upx_exclude=[],
     name='start',
 )
+
+### docker PostgreSQL 数据库 PostgreSQL + PostGIS
+
+启动 docker compose up -d
+    若有问题提示 compose 不存在之类
+    执行 docker-compose up -d
+进入容器 docker exec -it postgis bash
+进入数据库 psql -U gis -d gisdb
+检查 SELECT PostGIS_Version();

@@ -8,6 +8,7 @@ from pystray import MenuItem as item
 import os
 import sys
 from base import HOST, PORT, get_request_path
+from dev import start_postgis
 
 # 启动 FastAPI 服务
 def run_server():
@@ -45,6 +46,7 @@ def create_tray_icon():
 
 # 启动服务
 if __name__ == "__main__":
+  start_postgis()
   # 启动web与接口服务
   server_thread = threading.Thread(target=run_server, daemon=True)
   server_thread.start()

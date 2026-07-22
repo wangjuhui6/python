@@ -9,3 +9,6 @@ app/utils/__pycache__/
 app/data/__pycache__/
 app/server/__pycache__/
 app/sql/
+app/db/
+app/postgis-data/
+app/postgis/__pycache__/
