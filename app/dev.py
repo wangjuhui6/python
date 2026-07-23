@@ -23,8 +23,8 @@ def start_postgis():
     init_database()
   except Exception as e:
     print("postgis服务启动失败")
-    # print(type(e))
-    # print(e)
+    print(type(e))
+    print(e)
 
 # 查看数据库是否启动成功
 def wait_postgis():

@@ -60,6 +60,24 @@ export const routes: any[] = [
         component: () => import('../views/service/task.vue')
       }
     ]
+  },
+  {
+    path: '/postgis',
+    name: 'postgis',
+    redirect: '/postgis/list',
+    meta: {
+      title: '数据管理'
+    },
+    children: [
+      {
+        path: '/postgis/list',
+        name: 'postgis-list',
+        meta: {
+          title: '数据源'
+        },
+        component: () => import('../views/postgis/index.vue')
+      }
+    ]
   }
 ]
 

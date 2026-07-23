@@ -10,7 +10,7 @@ class DatabaseInitializer:
 
       self.create_tables()
 
-      # self.create_indexes()
+      self.create_indexes()
 
       print("数据库初始化完成")
 
@@ -34,9 +34,10 @@ class DatabaseInitializer:
          # 数据源表
          # id 自增
          # name 名称
-         # code 代码
+         # code 编码
          # srid 坐标系
          # description 描述
+         # mapping 字段映射 json
          # created_at 创建时间
          conn.execute(text("""
             CREATE TABLE IF NOT EXISTS datasets (
@@ -47,9 +48,11 @@ class DatabaseInitializer:
 
                code VARCHAR(100) UNIQUE,
 
-               srid INTEGER DEFAULT 4326,
+               srid VARCHAR(100) NOT NULL,
 
                description TEXT,
+
+               mapping JSONB DEFAULT '{}',
 
                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             );
@@ -124,9 +127,9 @@ class DatabaseInitializer:
 
 
 
-         # 规则查询
-         conn.execute(text("""
-            CREATE INDEX IF NOT EXISTS
-            idx_layer_rules_class_type
-            ON layer_rules(class,type);
-         """))
+         # # 规则查询
+         # conn.execute(text("""
+         #    CREATE INDEX IF NOT EXISTS
+         #    idx_layer_rules_class_type
+         #    ON layer_rules(class,type);
+         # """))
