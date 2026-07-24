@@ -4,6 +4,7 @@ from sqlalchemy import text
 import json
 from postgis.database import engine
 from osmium.geom import WKTFactory
+from postgis.server.featuresServer import add_features
 
 POLYGON_KEYS = {
   "building",
@@ -39,31 +40,12 @@ class PBFImporter(osmium.SimpleHandler):
 
     batch = self.cache.copy()
 
-    sql = text("""
-      INSERT INTO features
-      (
-        dataset_id,
-        geom,
-        properties
-      )
-      VALUES
-      (
-        :dataset_id,
-        ST_GeomFromText(:geom, 4326),
-        CAST(:properties AS jsonb)
-      )
-    """)
+    # 批量添加数据
+    result = add_features(batch)
+    if not result:
+      raise Exception("添加数据失败")
 
-    try:
-      with engine.begin() as conn:
-        conn.execute(sql, batch)
-        print(f"批量写入 {len(batch)} 条")
-        self.cache = []
-
-    except Exception as e:
-      print(e)
-      # 如果失败，放回缓存，避免数据丢失
-      # self.cache = batch + self.cache
+    self.cache = []
 
   def node(self, n):
     if len(n.tags) == 0:
