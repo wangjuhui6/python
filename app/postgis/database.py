@@ -115,11 +115,10 @@ def edit_data(table: str, data: dict):
 # 查询数据
 def query_data(table: str, data: dict):
   try:
-    with engine.connect() as conn:
+    with engine.begin() as conn:
       result = conn.execute(text(f"SELECT * FROM {table} WHERE {','.join(data.keys())} = {','.join(data.values())}"))
-    return result.fetchall()
+    return [row._asdict() for row in result.fetchall()]
   except Exception as e:
-    print(e)
     return False
 
 # 删除数据

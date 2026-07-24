@@ -26,3 +26,23 @@ export async function deleteDataset(data: any): Promise<string> {
     data
   })
 }
+
+// 导入数据
+export async function importData(data: any): Promise<string> {
+  return await service({
+    url: '/postgis/features/import',
+    method: 'post',
+    data
+  })
+}
+
+// 根据数据源id查询数据
+export async function listFeatures(datasets_id: number): Promise<string> {
+  return await service({
+    url: '/postgis/features/list',
+    method: 'get',
+    params: {
+      datasets_id
+    }
+  })
+}

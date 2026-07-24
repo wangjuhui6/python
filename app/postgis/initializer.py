@@ -61,9 +61,12 @@ class DatabaseInitializer:
          # 矢量数据表
          # id 自增
          # dataset_id 数据源id
-         # layer 图层 暂时删除 layer VARCHAR(100),
+         # layer 图层 道路 面 poi 等
          # class 类 水系 建筑 土地 海洋 等
          # type 类型 更精细的分类 国道 小道 等
+         # layer VARCHAR(100),
+         # class VARCHAR(50),
+         # type VARCHAR(50),
          # geom 几何体
          # properties 属性
          # created_at 创建时间
@@ -74,10 +77,6 @@ class DatabaseInitializer:
                id BIGSERIAL PRIMARY KEY,
 
                dataset_id BIGINT REFERENCES datasets(id) ON DELETE CASCADE,
-
-               class VARCHAR(50),
-
-               type VARCHAR(50),
 
                geom geometry(Geometry,4326) NOT NULL,
 

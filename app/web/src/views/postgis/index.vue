@@ -8,6 +8,7 @@
         <el-collapse-item v-for="(item) in list" :key="item.id" :title="item.name" :name="item.code">
           <div style="display: flex; align-items: center; justify-content: flex-end;">
             <el-button @click="addData(item.id)">添加数据</el-button>
+            <el-button @click="listFeatures(item.id)">查看数据</el-button>
             <el-button type="primary" @click="addDataset(item)">编辑</el-button>
             <el-button type="danger" @click="deleteDataset(item.id)">删除</el-button>
           </div>
@@ -16,7 +17,7 @@
               <div>数据源编码: {{ item.code }}</div>
             </el-col>
             <el-col :span="12">
-              <div>数据源坐标系: {{ item.srid }}</div>
+              <div>数据源坐标系: {{ SRID_OPTIONS_OBJ[item.srid] }}</div>
             </el-col>
             <el-col :span="24">
               <div>数据源描述: {{ item.description }}</div>
@@ -97,19 +98,29 @@
       </div>
     </template>
   </el-dialog>
+  <AddData ref="addDataRef" />
 </template>
 
 <script setup lang="ts">
 import { ref, reactive } from 'vue'
 import { Plus, RemoveFilled } from '@element-plus/icons-vue'
-import { getDatasets as getDatasetsApi, addDataset as addDatasetApi, deleteDataset as deleteDatasetApi } from '@/api/postgis'
+import { getDatasets as getDatasetsApi, addDataset as addDatasetApi, deleteDataset as deleteDatasetApi, listFeatures as listFeaturesApi } from '@/api/postgis'
 import { ElMessage } from 'element-plus'
+import AddData from './components/addData.vue'
 
 const SRID_OPTIONS = [
   { label: 'WGS84坐标系', value: 'WGS84' },
   { label: '火星坐标系', value: 'GCJ-02' },
   { label: '百度坐标系', value: 'BD-09' },
 ]
+
+const SRID_OPTIONS_OBJ: any = {}
+
+SRID_OPTIONS.forEach((item) => {
+  SRID_OPTIONS_OBJ[item.value] = item.label
+})
+
+const addDataRef = ref<any>()
 
 const rules = reactive({
   name: [
@@ -213,7 +224,17 @@ async function save() {
 
 // 添加数据
 function addData(id: number) {
-  console.log(id)
+  addDataRef.value.open(id)
+}
+
+// 查看数据
+async function listFeatures(id: number) {
+  const res: any = await listFeaturesApi(id)
+  if (res) {
+    ElMessage.success('查询成功')
+  } else {
+    ElMessage.error(res.msg)
+  }
 }
 
 </script>
