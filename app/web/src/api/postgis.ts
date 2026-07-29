@@ -37,13 +37,11 @@ export async function importData(data: any): Promise<string> {
 }
 
 // 根据数据源id查询数据
-export async function listFeatures(datasets_id: number): Promise<string> {
+export async function listFeatures(params: any): Promise<string> {
   return await service({
     url: '/postgis/features/list',
     method: 'get',
-    params: {
-      datasets_id
-    }
+    params
   })
 }
 

@@ -75,6 +75,21 @@ def get_features_by_dataset_id(dataset_id: int, page: int = 1, page_size: int = 
       'total': session.query(Feature).filter(Feature.dataset_id == dataset_id).count()
     }
 
+# 分页查询数据并返回总数geojson
+def get_features_by_dataset_id_geojson(dataset_id: int, page: int = 1, page_size: int = 1000):
+  with get_session() as session:
+    features = session.query(Feature).filter(Feature.dataset_id == dataset_id).offset((page - 1) * page_size).limit(page_size).all()
+    data = []
+    for feature in features:
+      feature.properties = json.loads(feature.properties)
+      data.append(feature.to_geojson())
+    return {
+      'data': data,
+      'page': page,
+      'page_size': page_size,
+      'total': session.query(Feature).filter(Feature.dataset_id == dataset_id).count()
+    }
+
 # 根据dataset_id删除所有数据
 def delete_feature_by_dataset_id(dataset_id: int):
   with get_session() as session:

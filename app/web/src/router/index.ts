@@ -75,8 +75,8 @@ export const routes: any[] = [
         meta: {
           title: '数据源'
         },
-        component: () => import('../views/postgis/index.vue')
-      }
+        component: () => import('../views/postgis/index.vue'),
+      },
     ]
   }
 ]
@@ -92,6 +92,11 @@ const router = createRouter({
       path: '/layout',
       component: () => import('../components/Layout/index.vue'),
       children: routes,
+    },
+    {
+      path: '/postgis/features/map/:id',
+      name: 'postgis-features-map',
+      component: () => import('../views/postgis/features/map.vue')
     }
   ],
 })

@@ -9,6 +9,7 @@
           <div style="display: flex; align-items: center; justify-content: flex-end;">
             <el-button @click="addData(item.id)">添加数据</el-button>
             <el-button @click="listFeatures(item.id)">查看数据</el-button>
+            <el-button @click="listFeaturesMap(item.id)">地图查看</el-button>
             <el-button type="primary" @click="addDataset(item)">编辑</el-button>
             <el-button type="danger" @click="deleteDataset(item.id)">删除</el-button>
             <el-button type="danger" @click="deleteFeatures(item.id)">删除数据</el-button>
@@ -116,6 +117,9 @@ import { getDatasets as getDatasetsApi,
 import { ElMessage } from 'element-plus'
 import AddData from './components/addData.vue'
 import ShowKeys from './components/showKeys.vue'
+import { useRouter } from 'vue-router'
+
+const router = useRouter()
 
 const SRID_OPTIONS = [
   { label: 'WGS84坐标系', value: 'WGS84' },
@@ -238,12 +242,23 @@ function addData(id: number) {
 
 // 查看数据
 async function listFeatures(id: number) {
-  const res: any = await listFeaturesApi(id)
+  const res: any = await listFeaturesApi({
+    datasets_id: id,
+    is_geojson: true,
+  })
   if (res) {
     ElMessage.success('查询成功')
   } else {
     ElMessage.error(res.msg)
   }
+}
+
+// 地图查看
+function listFeaturesMap(id: number) {
+  router.push({
+    name: 'postgis-features-map',
+    params: { id }
+  })
 }
 
 // 删除数据

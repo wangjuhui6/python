@@ -66,10 +66,13 @@ def import_data(data: dict):
 @router.get("/features/list")
 def list_features(request: Request):
   params = dict(request.query_params)
+  is_geojson = params.get('is_geojson') or False
   datasets_id = params.get('datasets_id')
   page = params.get('page') or 1
   page_size = params.get('page_size') or 1000
-  features = features_server_methods.get_features_by_dataset_id(datasets_id, page, page_size)
+  page = int(page)
+  page_size = int(page_size)
+  features = features_server_methods.get_features_by_dataset_id_geojson(datasets_id, page, page_size) if is_geojson else features_server_methods.get_features_by_dataset_id(datasets_id, page, page_size)
   data = {
     'data': features['data'] if features else [],
     'total': features['total'] if features else 0,
