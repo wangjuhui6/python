@@ -46,3 +46,30 @@ export async function listFeatures(datasets_id: number): Promise<string> {
     }
   })
 }
+
+// 根据数据源id删除所有数据
+export async function deleteFeatures(data: any): Promise<string> {
+  return await service({
+    url: '/postgis/features/delete',
+    method: 'post',
+    data
+  })
+}
+
+// 根据dataset_id查询数据中properties中的key
+export async function getFeaturePropertiesKeys(data: any): Promise<string> {
+  return await service({
+    url: '/postgis/features/properties/keys',
+    method: 'get',
+    params: data
+  })
+}
+
+// 根据dataset_id和key查询数据中properties中的value
+export async function getFeaturePropertiesValues(data: any): Promise<string> {
+  return await service({
+    url: '/postgis/features/properties/values',
+    method: 'get',
+    params: data
+  })
+}

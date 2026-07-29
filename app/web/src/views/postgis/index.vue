@@ -11,6 +11,8 @@
             <el-button @click="listFeatures(item.id)">查看数据</el-button>
             <el-button type="primary" @click="addDataset(item)">编辑</el-button>
             <el-button type="danger" @click="deleteDataset(item.id)">删除</el-button>
+            <el-button type="danger" @click="deleteFeatures(item.id)">删除数据</el-button>
+            <el-button type="primary" @click="getFeaturePropertiesKeys(item.id)">查看字段</el-button>
           </div>
           <el-row>
             <el-col :span="12">
@@ -99,14 +101,21 @@
     </template>
   </el-dialog>
   <AddData ref="addDataRef" />
+  <ShowKeys ref="showKeysRef" />
 </template>
 
 <script setup lang="ts">
 import { ref, reactive } from 'vue'
 import { Plus, RemoveFilled } from '@element-plus/icons-vue'
-import { getDatasets as getDatasetsApi, addDataset as addDatasetApi, deleteDataset as deleteDatasetApi, listFeatures as listFeaturesApi } from '@/api/postgis'
+import { getDatasets as getDatasetsApi,
+  addDataset as addDatasetApi,
+  deleteDataset as deleteDatasetApi,
+  listFeatures as listFeaturesApi,
+  deleteFeatures as deleteFeaturesApi
+} from '@/api/postgis'
 import { ElMessage } from 'element-plus'
 import AddData from './components/addData.vue'
+import ShowKeys from './components/showKeys.vue'
 
 const SRID_OPTIONS = [
   { label: 'WGS84坐标系', value: 'WGS84' },
@@ -163,7 +172,7 @@ function addMapping() {
   })
 }
 
-function deleteMapping(index: number) {
+function deleteMapping(index: number | string) {
   formData.mapping.splice(index, 1)
 }
 
@@ -235,6 +244,20 @@ async function listFeatures(id: number) {
   } else {
     ElMessage.error(res.msg)
   }
+}
+
+// 删除数据
+async function deleteFeatures(id: number) {
+  const res: any = await deleteFeaturesApi({ datasets_id: id })
+  if (res) {
+    ElMessage.success('删除成功')
+  }
+}
+
+const showKeysRef = ref<any>()
+// 查看字段
+async function getFeaturePropertiesKeys(id: number) {
+  showKeysRef.value.open(id)
 }
 
 </script>

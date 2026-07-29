@@ -1,16 +1,15 @@
 from fastapi import APIRouter, Request
 from utils.response import ResponseModel
 from utils.osm_importer import PBFImporter
-from postgis.server.datasetsServer import add_dataset as add_dataset_server, update_dataset as update_dataset_server, delete_dataset as delete_dataset_server, get_all_datasets as get_all_datasets_server, get_dataset_by_code as get_dataset_by_code_server, get_dataset_by_name as get_dataset_by_name_server
-from postgis.server.featuresServer import add_feature as add_feature_server, update_feature as update_feature_server, delete_feature as delete_feature_server, get_all_features as get_all_features_server, get_feature_by_dataset_id as get_feature_by_dataset_id_server, get_feature_by_geom as get_feature_by_geom_server
+import postgis.server.datasetsServer as datasets_server_methods
+import postgis.server.featuresServer as features_server_methods
 
 router = APIRouter(prefix="/postgis", tags=["POSTGIS"])
 
 # 查询数据源列表
 @router.get("/datasets")
 def read_root():
-  print("查询数据源列表")
-  datasets = get_all_datasets_server()
+  datasets = datasets_server_methods.get_all_datasets()
   return ResponseModel(
     code=200,
     msg="查询列表成功",
@@ -20,7 +19,7 @@ def read_root():
 # 新增/编辑 数据源
 @router.post("/datasets/add")
 def add_dataset(data: dict):
-  id = add_dataset_server(data) if not data.get('id') else update_dataset_server(data.get('id'), data)
+  id = datasets_server_methods.add_dataset(data) if not data.get('id') else datasets_server_methods.update_dataset(data.get('id'), data)
   return ResponseModel(
     code=200,
     msg="新增数据源成功",
@@ -29,7 +28,7 @@ def add_dataset(data: dict):
 
 @router.post("/datasets/delete")
 def delete_dataset(data: dict):
-  result = delete_dataset_server(data.get('id'))
+  result = datasets_server_methods.delete_dataset(data.get('id'))
   return ResponseModel(
     code=200,
     msg="删除数据源成功",
@@ -68,9 +67,52 @@ def import_data(data: dict):
 def list_features(request: Request):
   params = dict(request.query_params)
   datasets_id = params.get('datasets_id')
-  features = get_feature_by_dataset_id_server(datasets_id)
+  page = params.get('page') or 1
+  page_size = params.get('page_size') or 1000
+  features = features_server_methods.get_features_by_dataset_id(datasets_id, page, page_size)
+  data = {
+    'data': features['data'] if features else [],
+    'total': features['total'] if features else 0,
+    'page': features['page'] if features else 1,
+    'page_size': features['page_size'] if features else 1000
+  }
   return ResponseModel(
     code=200,
     msg="查询数据成功",
-    data=features if features else []
+    data=data
+  )
+
+# 根据数据源id删除所有数据
+@router.post("/features/delete")
+def delete_features(data: dict):
+  result = features_server_methods.delete_feature_by_dataset_id(data.get('datasets_id'))
+  return ResponseModel(
+    code=200,
+    msg="删除数据成功",
+    data=result
+  )
+
+# 根据dataset_id查询数据中properties中的key
+@router.get("/features/properties/keys")
+def get_feature_properties_keys(request: Request):
+  params = dict(request.query_params)
+  datasets_id = params.get('datasets_id')
+  keys = features_server_methods.get_feature_properties_keys(datasets_id)
+  return ResponseModel(
+    code=200,
+    msg="查询数据成功",
+    data=keys
+  )
+
+# 根据dataset_id和key查询数据中properties中的value
+@router.get("/features/properties/values")
+def get_feature_properties_values(request: Request):
+  params = dict(request.query_params)
+  datasets_id = params.get('datasets_id')
+  key = params.get('key')
+  values = features_server_methods.get_feature_properties_values(datasets_id, key)
+  return ResponseModel(
+    code=200,
+    msg="查询数据成功",
+    data=values
   )

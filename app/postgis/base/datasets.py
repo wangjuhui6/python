@@ -18,6 +18,6 @@ class Dataset(Base):
 
   description: Mapped[str] = mapped_column(Text)
 
-  mapping: Mapped[dict] = mapped_column(JSONB, default={})
+  mapping: Mapped[dict] = mapped_column(JSONB, default=dict, server_default='{}')
 
   created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now())

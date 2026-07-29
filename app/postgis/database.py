@@ -1,5 +1,8 @@
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker, DeclarativeBase
+from geoalchemy2.shape import to_shape
+from geoalchemy2.functions import ST_AsGeoJSON
+from shapely.geometry import mapping
 
 # 数据库连接URL
 DATABASE_URL = "postgresql://gis:123456@localhost:5432/gisdb"
@@ -25,6 +28,19 @@ class Base(DeclarativeBase):
     return {
       c.name: getattr(self, c.name)
       for c in self.__table__.columns
+    }
+
+  def to_geojson(self):
+    geometry = None
+
+    if self.geom is not None:
+      geometry = mapping(to_shape(self.geom))
+
+    return {
+      "type": "Feature",
+      "id": self.id,
+      "geometry": geometry,
+      "properties": self.properties or {}
     }
 
 # 获取会话

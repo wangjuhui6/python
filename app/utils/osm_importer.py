@@ -53,7 +53,7 @@ class PBFImporter(osmium.SimpleHandler):
 
     feature = {
       'dataset_id': self.datasets_id,
-      'geom': f"POINT({n.location.lon} {n.location.lat})",
+      'geom': self.wkt.create_point(n),
       'properties': json.dumps(dict(n.tags), ensure_ascii=False)
     }
     
@@ -125,6 +125,7 @@ class PBFImporter(osmium.SimpleHandler):
         return
       # Relation 转 WKT（根据你的实现）
       geom = self.wkt.create_multipolygon(r)
+      
       feature = {
         "dataset_id": self.datasets_id,
         "geom": geom,
