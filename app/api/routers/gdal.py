@@ -4,6 +4,8 @@ from pydantic import BaseModel
 import os
 from utils.response import ResponseModel
 from server.record import add_record, update_record
+import geopandas as gpd
+from utils.shpToGlb import ShpToGlb
 
 # todo geojson转shp成功了
 # 后续看看还有哪些功能 将这些都集成一下
@@ -228,3 +230,27 @@ def osmPbfToMbtiles(params: GeojsonToShpParams):
   #   msg="任务添加成功",
   #   data=True
   # )
+
+# shp 获取字段
+@router.post("/getShpFields")
+def getShpFields(data: dict):
+  file = data.get('file')
+  gdf = gpd.read_file(file)
+  fields = gdf.columns.tolist()
+  return ResponseModel(
+    code=200,
+    msg="获取字段成功",
+    data=fields
+  )
+
+# shp 生成白膜
+@router.post("/generateGlb")
+def generateGlb(data: dict):
+  shpToGlb = ShpToGlb(data)
+  print(shpToGlb)
+
+  return ResponseModel(
+    code=200,
+    msg="生成白膜成功",
+    data=True
+  )

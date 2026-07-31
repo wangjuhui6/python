@@ -42,7 +42,7 @@ function setData() {
 }
 
 onMounted(async () => {
-  const res: any = await listFeatures({ datasets_id: id, is_geojson: true, page_size: 10000 })
+  const res: any = await listFeatures({ datasets_id: id, is_geojson: true, page_size: 100000 })
   geojsonData = {
     type: 'FeatureCollection',
     features: res.data

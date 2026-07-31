@@ -43,6 +43,7 @@
         />
       </div>
     </el-card> -->
+    <ShpToGlb />
   </div>
 </template>
 
@@ -51,6 +52,7 @@ import { reactive, watch } from 'vue'
 import Upload from '@/components/Upload/index.vue'
 import { ElMessage } from 'element-plus'
 import { geojsonToShp, osmPbfToMbtiles } from '@/api/gdal'
+import ShpToGlb from './commponents/vector/shpToGlb.vue'
 
 // geoJSON转Shapefile
 const oneData = reactive({

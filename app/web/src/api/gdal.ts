@@ -17,3 +17,21 @@ export async function osmPbfToMbtiles(data: any): Promise<string> {
     data
   })
 }
+
+// shp 获取字段
+export async function getShpFields(data: any): Promise<string> {
+  return await service({
+    url: '/gdal/getShpFields',
+    method: 'post',
+    data
+  })
+}
+
+// shp 生成白膜
+export async function generateGlb(data: any): Promise<string> {
+  return await service({
+    url: '/gdal/generateGlb',
+    method: 'post',
+    data
+  })
+}

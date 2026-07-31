@@ -54,7 +54,7 @@ export function useMap(props: useMapOptions): useMapReturn {
             id: 'geojson-layer',
             type: 'fill',
             source: 'geojson-source',
-            filter: ['==', 'type', 'Polygon'],
+            // filter: ['==', 'type', 'Polygon'],
             paint: {
               'fill-color': '#000000',
               'fill-opacity': 0.5
@@ -64,7 +64,7 @@ export function useMap(props: useMapOptions): useMapReturn {
             id: 'geojson-line-layer',
             type: 'line',
             source: 'geojson-source',
-            filter: ['==', 'type', 'LineString'],
+            // filter: ['==', 'type', 'LineString'],
             paint: {
               'line-color': '#000000',
               'line-width': 2
@@ -74,7 +74,7 @@ export function useMap(props: useMapOptions): useMapReturn {
             id: 'geojson-circle-layer',
             type: 'circle',
             source: 'geojson-source',
-            filter: ['==', 'type', 'Point'],
+            // filter: ['==', 'type', 'Point'],
             paint: {
               'circle-color': '#000000',
               'circle-radius': 2
