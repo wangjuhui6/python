@@ -44,6 +44,7 @@
       </div>
     </el-card> -->
     <ShpToGlb />
+    <Crop3dTiles />
   </div>
 </template>
 
@@ -53,6 +54,7 @@ import Upload from '@/components/Upload/index.vue'
 import { ElMessage } from 'element-plus'
 import { geojsonToShp, osmPbfToMbtiles } from '@/api/gdal'
 import ShpToGlb from './commponents/vector/shpToGlb.vue'
+import Crop3dTiles from './commponents/vector/crop3dTiles.vue'
 
 // geoJSON转Shapefile
 const oneData = reactive({

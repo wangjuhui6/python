@@ -258,35 +258,30 @@ def generateGlb(data: dict):
   )
 
 # 3dtiles裁剪
-@router.get("/clip3dTiles")
-def clip3dTiles():
-  # todo 入参 输入文件，输出文件路径，裁剪范围 裁剪方式
-  # todo 通过单独一个方法去处理裁剪 并返回裁剪后的文件路径
-  # inputFile = data.get('inputFile')
-  # outputPath = data.get('outputPath')
-  # pathName = os.path.basename(outputPath).split(".")[0]
-  # print(pathName, '我是pathName', outputPath, '我是inputFile')
-  inputFile = 'D:/lyg/huiyizhongx'
-  outputPath = 'D:/lyg/new/huiyizhongxin'
-  clipPolygon = 'D:/lyg/huiyizhongx.json'
-  mode = 'remove'
-  # dyyy
-  # clip3dTiles = Clip3dTiles({
-  #   'inputPath': 'D:/lyg/lianyungangdiyirenminyiyuan',
-  #   'outputPath': 'D:/lyg/new/lianyungangdiyirenminyiyuan',
-  #   'clipPolygon': 'D:/lyg/geojson.json',
-  #   'mode': 'remove',
-  # })
-  # hyzx
-  clip3dTiles = Clip3dTilesNew({
-    'inputPath': 'D:/lyg/huiyizhongx',
-    'outputPath': 'D:/lyg/new/huiyizhongx',
-    'clipPolygon': 'D:/lyg/huiyizhongx.json',
-    'mode': 'remove',
-    'b3dmCoordinateMode': 'ecef',
-  })
+@router.post("/clip3dTiles")
+def clip3dTiles(data: dict):
+  inputPath = data.get('inputPath')
+  outputPath = data.get('outputPath')
+  clipPolygon = data.get('clipPolygon')
+  mode = data.get('mode')
+  isNew = data.get('isNew')
+  if isNew:
+    clip3dTiles = Clip3dTilesNew({
+      'inputPath': inputPath,
+      'outputPath': outputPath,
+      'clipPolygon': clipPolygon,
+      'mode': mode,
+    })
+  else:
+    clip3dTiles = Clip3dTiles({
+      'inputPath': inputPath,
+      'outputPath': outputPath,
+      'clipPolygon': clipPolygon,
+      'mode': mode,
+    })
+
   return ResponseModel(
-    code=200,
-    msg="裁剪3dtiles成功",
-    data=True
+    code=200 if clip3dTiles else 500,
+    msg="裁剪3dtiles成功" if clip3dTiles else "裁剪3dtiles失败",
+    data=True if clip3dTiles else False
   )

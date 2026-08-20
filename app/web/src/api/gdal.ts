@@ -35,3 +35,12 @@ export async function generateGlb(data: any): Promise<string> {
     data
   })
 }
+
+// 3dtiles裁剪
+export async function clip3dTiles(data: any): Promise<string> {
+  return await service({
+    url: '/gdal/clip3dTiles',
+    method: 'post',
+    data
+  })
+}
