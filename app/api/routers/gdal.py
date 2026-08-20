@@ -6,6 +6,8 @@ from utils.response import ResponseModel
 from server.record import add_record, update_record
 import geopandas as gpd
 from utils.shpToGlb import ShpToGlb
+from utils.clip3dTiles import Clip3dTiles
+from utils.clip3dTilesNew import Clip3dTilesNew
 
 # todo geojson转shp成功了
 # 后续看看还有哪些功能 将这些都集成一下
@@ -252,5 +254,39 @@ def generateGlb(data: dict):
   return ResponseModel(
     code=200,
     msg="生成白膜成功",
+    data=True
+  )
+
+# 3dtiles裁剪
+@router.get("/clip3dTiles")
+def clip3dTiles():
+  # todo 入参 输入文件，输出文件路径，裁剪范围 裁剪方式
+  # todo 通过单独一个方法去处理裁剪 并返回裁剪后的文件路径
+  # inputFile = data.get('inputFile')
+  # outputPath = data.get('outputPath')
+  # pathName = os.path.basename(outputPath).split(".")[0]
+  # print(pathName, '我是pathName', outputPath, '我是inputFile')
+  inputFile = 'D:/lyg/huiyizhongx'
+  outputPath = 'D:/lyg/new/huiyizhongxin'
+  clipPolygon = 'D:/lyg/huiyizhongx.json'
+  mode = 'remove'
+  # dyyy
+  # clip3dTiles = Clip3dTiles({
+  #   'inputPath': 'D:/lyg/lianyungangdiyirenminyiyuan',
+  #   'outputPath': 'D:/lyg/new/lianyungangdiyirenminyiyuan',
+  #   'clipPolygon': 'D:/lyg/geojson.json',
+  #   'mode': 'remove',
+  # })
+  # hyzx
+  clip3dTiles = Clip3dTilesNew({
+    'inputPath': 'D:/lyg/huiyizhongx',
+    'outputPath': 'D:/lyg/new/huiyizhongx',
+    'clipPolygon': 'D:/lyg/huiyizhongx.json',
+    'mode': 'remove',
+    'b3dmCoordinateMode': 'ecef',
+  })
+  return ResponseModel(
+    code=200,
+    msg="裁剪3dtiles成功",
     data=True
   )
