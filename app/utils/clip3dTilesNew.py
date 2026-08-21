@@ -103,6 +103,12 @@ class Clip3dTilesNew:
 
         enu
             GLB POSITION + RTC_CENTER 本身就是 ENU
+
+
+    debugger:
+
+        调试模式，默认关闭，非必填。
+        开启后打印处理过程日志。
     """
 
     # ================================================================
@@ -151,6 +157,13 @@ class Clip3dTilesNew:
                 "b3dmCoordinateMode 必须是 "
                 "auto / ecef / local_rtc / enu"
             )
+
+        self.debugger = bool(
+            options.get(
+                "debugger",
+                False,
+            )
+        )
 
         # ------------------------------------------------------------
         # WGS84 -> ECEF
@@ -300,88 +313,92 @@ class Clip3dTilesNew:
 
         self.run()
 
+    def debug(self, *args, **kwargs):
+        if self.debugger:
+            print(*args, **kwargs)
+
     # ================================================================
     # 主流程
     # ================================================================
 
     def run(self):
 
-        print()
-        print("=" * 100)
-        print("开始处理 3D Tiles")
-        print("=" * 100)
+        self.debug()
+        self.debug("=" * 100)
+        self.debug("开始处理 3D Tiles")
+        self.debug("=" * 100)
 
-        print(
+        self.debug(
             "输入:",
             self.input_path,
         )
 
-        print(
+        self.debug(
             "输出:",
             self.output_path,
         )
 
-        print(
+        self.debug(
             "GeoJSON:",
             self.clip_file,
         )
 
-        print(
+        self.debug(
             "模式:",
             self.mode,
         )
 
-        print(
+        self.debug(
             "内容坐标模式:",
             self.b3dm_coordinate_mode,
         )
 
-        print()
-        print("ENU 原点:")
+        self.debug()
+        self.debug("ENU 原点:")
 
-        print(
+        self.debug(
             "  lon:",
             self.enu_origin[0],
         )
 
-        print(
+        self.debug(
             "  lat:",
             self.enu_origin[1],
         )
 
-        print(
+        self.debug(
             "  height:",
             self.enu_origin[2],
         )
 
-        print()
-        print(
+        self.debug()
+        self.debug(
             "ENU 原点 ECEF:",
             self.enu_origin_ecef,
         )
 
-        print()
-        print("GeoJSON ENU XY:")
+        self.debug()
+        self.debug("GeoJSON ENU XY:")
 
-        print(
+        self.debug(
             "  min:",
             self.clip_bbox[0],
             self.clip_bbox[1],
         )
 
-        print(
+        self.debug(
             "  max:",
             self.clip_bbox[2],
             self.clip_bbox[3],
         )
 
-        print()
-        print(
+        self.debug()
+        self.debug(
             "GeoJSON geometry:",
             self.clip_polygon.geom_type,
         )
 
-        print("=" * 100)
+        self.debug("=" * 100)
 
         # ------------------------------------------------------------
         # 查找 tileset
@@ -416,7 +433,7 @@ class Clip3dTilesNew:
 
             else:
 
-                print(
+                self.debug(
                     "正在递归查找 tileset.json..."
                 )
 
@@ -433,7 +450,7 @@ class Clip3dTilesNew:
                 "没有找到 tileset.json"
             )
 
-        print(
+        self.debug(
             f"找到 {len(tilesets)} 个 tileset.json"
         )
 
@@ -446,26 +463,26 @@ class Clip3dTilesNew:
             start=1,
         ):
 
-            print()
-            print("#" * 100)
+            self.debug()
+            self.debug("#" * 100)
 
-            print(
+            self.debug(
                 f"[{index}/{len(tilesets)}]",
                 tileset_file,
             )
 
-            print("#" * 100)
+            self.debug("#" * 100)
 
             self.process_tileset_file(
                 tileset_file
             )
 
-        print()
-        print("=" * 100)
-        print("全部处理完成")
-        print("=" * 100)
+        self.debug()
+        self.debug("=" * 100)
+        self.debug("全部处理完成")
+        self.debug("=" * 100)
 
-        print(
+        self.debug(
             json.dumps(
                 self.stats,
                 ensure_ascii=False,
@@ -473,13 +490,13 @@ class Clip3dTilesNew:
             )
         )
 
-        print()
-        print(
+        self.debug()
+        self.debug(
             "输出目录:",
             self.output_path,
         )
 
-        print("=" * 100)
+        self.debug("=" * 100)
 
     # ================================================================
     # WGS84 -> ECEF
@@ -672,7 +689,7 @@ class Clip3dTilesNew:
                             )
                         )
 
-                        print(
+                        self.debug(
                             "ENU 原点取自 tileset transform"
                         )
 
@@ -721,7 +738,7 @@ class Clip3dTilesNew:
                             )
                         )
 
-                        print(
+                        self.debug(
                             "ENU 原点取自 tileset boundingVolume ECEF"
                         )
 
@@ -733,12 +750,12 @@ class Clip3dTilesNew:
 
             except Exception as e:
 
-                print(
+                self.debug(
                     "读取 tileset 原点失败，改用 GeoJSON 质心:",
                     e,
                 )
 
-        print(
+        self.debug(
             "ENU 原点取自 GeoJSON 质心"
         )
 
@@ -1210,7 +1227,7 @@ class Clip3dTilesNew:
 
         except Exception as e:
 
-            print(
+            self.debug(
                 "读取 JSON 失败:",
                 e,
             )
@@ -1236,14 +1253,14 @@ class Clip3dTilesNew:
             tileset
         )
 
-        print()
-        print("tileset inherited transform:")
+        self.debug()
+        self.debug("tileset inherited transform:")
 
-        print(
+        self.debug(
             inherited_transform
         )
 
-        print(
+        self.debug(
             "tileset root transform:",
             tileset["root"].get(
                 "transform"
@@ -1262,7 +1279,7 @@ class Clip3dTilesNew:
 
         if new_root is None:
 
-            print(
+            self.debug(
                 "tileset 裁剪后为空:",
                 tileset_file,
             )
@@ -1300,7 +1317,7 @@ class Clip3dTilesNew:
             "json_written"
         ] += 1
 
-        print(
+        self.debug(
             "输出:",
             output_file,
         )
@@ -1539,7 +1556,7 @@ class Clip3dTilesNew:
 
         if not src.exists():
 
-            print(
+            self.debug(
                 "资源不存在:",
                 src,
             )
@@ -2986,15 +3003,15 @@ class Clip3dTilesNew:
             "b3dm_total"
         ] += 1
 
-        print()
-        print("=" * 90)
+        self.debug()
+        self.debug("=" * 90)
 
-        print(
+        self.debug(
             "B3DM:",
             input_path,
         )
 
-        print("=" * 90)
+        self.debug("=" * 90)
 
         try:
 
@@ -3004,7 +3021,7 @@ class Clip3dTilesNew:
 
         except Exception as e:
 
-            print(
+            self.debug(
                 "B3DM 解析失败:",
                 e,
             )
@@ -3034,23 +3051,23 @@ class Clip3dTilesNew:
             )
         )
 
-        print()
-        print(
+        self.debug()
+        self.debug(
             "RTC_CENTER:",
             rtc_center,
         )
 
-        print(
+        self.debug(
             "坐标模式:",
             coordinate_mode,
         )
 
-        print()
-        print(
+        self.debug()
+        self.debug(
             "Tileset Transform:"
         )
 
-        print(
+        self.debug(
             transform
         )
 
@@ -3068,7 +3085,7 @@ class Clip3dTilesNew:
 
         except Exception as e:
 
-            print(
+            self.debug(
                 "GLB 解析失败:",
                 e,
             )
@@ -3086,12 +3103,12 @@ class Clip3dTilesNew:
                 None,
             )
 
-        print()
-        print(
+        self.debug()
+        self.debug(
             "========== GLB POSITION DEBUG =========="
         )
 
-        print(
+        self.debug(
             "geometry count:",
             len(meshes),
         )
@@ -3110,37 +3127,37 @@ class Clip3dTilesNew:
                 "faces"
             ]
 
-            print()
-            print(
+            self.debug()
+            self.debug(
                 "geometry:",
                 index,
             )
 
-            print(
+            self.debug(
                 "node:",
                 item["node_index"],
             )
 
-            print(
+            self.debug(
                 "vertices:",
                 len(positions),
             )
 
-            print(
+            self.debug(
                 "faces:",
                 len(faces),
             )
 
             if len(positions) > 0:
 
-                print(
+                self.debug(
                     "GLTF transformed min:",
                     positions.min(
                         axis=0
                     ),
                 )
 
-                print(
+                self.debug(
                     "GLTF transformed max:",
                     positions.max(
                         axis=0
@@ -3151,13 +3168,13 @@ class Clip3dTilesNew:
                 positions
             )
 
-        print(
+        self.debug(
             "========================================"
         )
 
         if not all_positions:
 
-            print(
+            self.debug(
                 "GLB 没有 POSITION"
             )
 
@@ -3197,17 +3214,17 @@ class Clip3dTilesNew:
             )
         )
 
-        print()
-        print(
+        self.debug()
+        self.debug(
             "B3DM ENU XY:"
         )
 
-        print(
+        self.debug(
             "  min:",
             bounds_enu[0, :2],
         )
 
-        print(
+        self.debug(
             "  max:",
             bounds_enu[1, :2],
         )
@@ -3218,7 +3235,7 @@ class Clip3dTilesNew:
             )
         )
 
-        print(
+        self.debug(
             "B3DM XY relation:",
             relation,
         )
@@ -3235,7 +3252,7 @@ class Clip3dTilesNew:
                     "b3dm_removed"
                 ] += 1
 
-                print(
+                self.debug(
                     "  XY 完全外部 -> 删除"
                 )
 
@@ -3307,7 +3324,7 @@ class Clip3dTilesNew:
                 "b3dm_removed"
             ] += 1
 
-            print(
+            self.debug(
                 "  XY 完全内部 -> 删除"
             )
 
@@ -3320,7 +3337,7 @@ class Clip3dTilesNew:
         # 相交
         # ------------------------------------------------------------
 
-        print(
+        self.debug(
             "  XY 相交 -> 开始精确裁剪"
         )
 
@@ -3405,7 +3422,7 @@ class Clip3dTilesNew:
                 "b3dm_removed"
             ] += 1
 
-            print(
+            self.debug(
                 "  裁剪后为空"
             )
 
@@ -3448,7 +3465,7 @@ class Clip3dTilesNew:
             "b3dm_clipped"
         ] += 1
 
-        print(
+        self.debug(
             "  输出:",
             output_path,
         )
@@ -3602,8 +3619,8 @@ class Clip3dTilesNew:
             "glb_total"
         ] += 1
 
-        print()
-        print(
+        self.debug()
+        self.debug(
             "GLB:",
             input_path,
         )
@@ -3622,7 +3639,7 @@ class Clip3dTilesNew:
 
         except Exception as e:
 
-            print(
+            self.debug(
                 "GLB 解析失败:",
                 e,
             )
@@ -3668,21 +3685,21 @@ class Clip3dTilesNew:
             )
         )
 
-        print(
+        self.debug(
             "GLB 世界坐标已是 ECEF:",
             self.is_ecef_xyz(
                 all_positions[0]
             ),
         )
 
-        print(
+        self.debug(
             "GLB ENU min:",
             bounds[0, :2],
             "max:",
             bounds[1, :2],
         )
 
-        print(
+        self.debug(
             "Clip ENU min:",
             self.clip_bbox[0],
             self.clip_bbox[1],
@@ -3697,7 +3714,7 @@ class Clip3dTilesNew:
             )
         )
 
-        print(
+        self.debug(
             "GLB XY relation:",
             relation,
         )
@@ -3898,7 +3915,7 @@ class Clip3dTilesNew:
             "glb_clipped"
         ] += 1
 
-        print(
+        self.debug(
             "输出:",
             output_path,
         )
@@ -5679,4 +5696,12 @@ if __name__ == "__main__":
 
         "b3dmCoordinateMode":
             "ecef",
+
+        # ============================================================
+        # 调试模式（非必填，默认关闭）
+        # 开启后打印处理过程日志
+        # ============================================================
+
+        "debugger":
+            False,
     })

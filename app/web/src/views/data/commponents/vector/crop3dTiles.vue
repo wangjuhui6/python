@@ -35,6 +35,10 @@
         <div>新模式</div>
         <el-switch v-model="data.isNew" />
       </div>
+      <div class="mode-container">
+        <div>调试模式</div>
+        <el-switch v-model="data.debugger" />
+      </div>
       <el-button type="primary" @click="save">裁剪</el-button>
     </div>
   </el-card>
@@ -52,7 +56,8 @@ const data = reactive({
   outputPath: '',
   clipPolygon: '',
   mode: 'remove',
-  isNew: false
+  isNew: false,
+  debugger: false
 })
 
 const modeOptions = ref([

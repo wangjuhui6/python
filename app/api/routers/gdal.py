@@ -265,12 +265,14 @@ def clip3dTiles(data: dict):
   clipPolygon = data.get('clipPolygon')
   mode = data.get('mode')
   isNew = data.get('isNew')
+  debugger = data.get('debugger', False)
   if isNew:
     clip3dTiles = Clip3dTilesNew({
       'inputPath': inputPath,
       'outputPath': outputPath,
       'clipPolygon': clipPolygon,
       'mode': mode,
+      'debugger': debugger,
     })
   else:
     clip3dTiles = Clip3dTiles({
@@ -278,6 +280,7 @@ def clip3dTiles(data: dict):
       'outputPath': outputPath,
       'clipPolygon': clipPolygon,
       'mode': mode,
+      'debugger': debugger,
     })
 
   return ResponseModel(
