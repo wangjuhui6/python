@@ -1116,6 +1116,32 @@ class Clip3dTiles:
         return result
 
     # ================================================================
+    # GLB Y-up POSITION + RTC_CENTER -> tileset box 坐标系
+    #
+    # osgb2tiles4：
+    #   boundingVolume.box 中心 ≈ RTC_CENTER
+    #   (x, y, z)_glb -> (x, -z, y) + RTC
+    # ================================================================
+
+    def b3dm_positions_to_tile_local(
+        self,
+        positions,
+        rtc_center,
+    ):
+
+        rtc = np.asarray(
+            rtc_center,
+            dtype=np.float64,
+        )
+
+        return (
+            self.y_up_to_z_up(
+                positions
+            )
+            + rtc
+        )
+
+    # ================================================================
     # Tileset
     # ================================================================
 
@@ -1407,22 +1433,17 @@ class Clip3dTiles:
         # ------------------------------------------------------------
         # 裁剪后的 BoundingVolume
         #
-        # bounds 是 Tile Local 坐标
+        # tileset.json 的 box 必须是 Tile Local Z-up
+        # （GLB Y-up → Z-up + RTC_CENTER），
+        # 并且必须包住所有 children。
+        #
+        # 否则 Cesium REPLACE 细化时，
+        # 精细层会在个别视角被视锥剔除。
         # ------------------------------------------------------------
 
-        if "_clip_bounds" in tile:
-
-            bounds = tile.pop(
-                "_clip_bounds"
-            )
-
-            tile[
-                "boundingVolume"
-            ] = (
-                self.make_box_bounding_volume(
-                    bounds
-                )
-            )
+        self.update_tile_bounding_volume(
+            tile,
+        )
 
         # ------------------------------------------------------------
         # 没有内容 / children
@@ -3143,15 +3164,11 @@ class Clip3dTiles:
                 "b3dm_copied"
             ] += 1
 
+            # 原样复制：保留 tileset 原包围盒。
+            # 不要用 GLB Y-up 坐标去改 boundingVolume。
             return (
                 "copied",
-                self.bounds_to_6(
-                    self.positions_bounds_to_local(
-                        bounds_enu,
-                        rtc_center,
-                        transform,
-                    )
-                ),
+                None,
             )
 
         # ------------------------------------------------------------
@@ -3170,28 +3187,10 @@ class Clip3dTiles:
                     "b3dm_copied"
                 ] += 1
 
-                local_bounds = (
-                    self.bounds_from_positions(
-                        self.b3dm_positions_to_enu(
-                            all_positions,
-                            rtc_center,
-                            transform,
-                        )
-                    )
-                )
-
-                # 使用原始 GLB Local bounds
-                local_bounds = (
-                    self.bounds_from_positions(
-                        all_positions
-                    )
-                )
-
+                # 完全内部且未改网格：保留原包围盒。
                 return (
                     "copied",
-                    self.bounds_to_6(
-                        local_bounds
-                    ),
+                    None,
                 )
 
             self.stats[
@@ -3286,7 +3285,10 @@ class Clip3dTiles:
 
             local_bounds.append(
                 self.bounds_from_positions(
-                    vertices_local
+                    self.b3dm_positions_to_tile_local(
+                        vertices_local,
+                        rtc_center,
+                    )
                 )
             )
 
@@ -3595,17 +3597,9 @@ class Clip3dTiles:
                 "glb_copied"
             ] += 1
 
-            local_bounds = (
-                self.bounds_from_positions(
-                    all_positions
-                )
-            )
-
             return (
                 "copied",
-                self.bounds_to_6(
-                    local_bounds
-                ),
+                None,
             )
 
         # ------------------------------------------------------------
@@ -3624,17 +3618,9 @@ class Clip3dTiles:
                     "glb_copied"
                 ] += 1
 
-                local_bounds = (
-                    self.bounds_from_positions(
-                        all_positions
-                    )
-                )
-
                 return (
                     "copied",
-                    self.bounds_to_6(
-                        local_bounds
-                    ),
+                    None,
                 )
 
             self.stats[
@@ -3712,7 +3698,9 @@ class Clip3dTiles:
 
             result_bounds.append(
                 self.bounds_from_positions(
-                    vertices_local
+                    self.y_up_to_z_up(
+                        vertices_local
+                    )
                 )
             )
 
@@ -4266,6 +4254,16 @@ class Clip3dTiles:
                         and len(indices) == 3
                     ):
 
+                        indices = (
+                            self.preserve_triangle_winding(
+                                indices,
+                                new_vertices,
+                                a,
+                                b,
+                                c,
+                            )
+                        )
+
                         new_faces.append(
                             indices
                         )
@@ -4302,6 +4300,60 @@ class Clip3dTiles:
             )
 
         return result
+
+    # ================================================================
+    # 保持裁剪后三角形与原三角形同向
+    # shapely triangulate 是 2D CCW，
+    # 直接写回去会在个别视角被背面剔除。
+    # ================================================================
+
+    @staticmethod
+    def xy_signed_area(
+        p0,
+        p1,
+        p2,
+    ):
+
+        return (
+            (p1[0] - p0[0])
+            * (p2[1] - p0[1])
+            -
+            (p2[0] - p0[0])
+            * (p1[1] - p0[1])
+        )
+
+    def preserve_triangle_winding(
+        self,
+        indices,
+        vertices,
+        a,
+        b,
+        c,
+    ):
+
+        ia, ib, ic = indices
+
+        original = self.xy_signed_area(
+            a,
+            b,
+            c,
+        )
+
+        clipped = self.xy_signed_area(
+            vertices[ia],
+            vertices[ib],
+            vertices[ic],
+        )
+
+        if original * clipped < 0:
+
+            return [
+                ia,
+                ic,
+                ib,
+            ]
+
+        return indices
 
     # ================================================================
     # Z 插值
@@ -4527,16 +4579,211 @@ class Clip3dTiles:
     # ================================================================
     # Bounding Volume
     #
-    # 注意：
-    #
-    # 这里使用 Tile Local 坐标
-    #
-    # 不再使用 ENU 坐标
+    # tileset.json box 使用 Tile Local Z-up：
+    #   y_up_to_z_up(GLB POSITION) + RTC_CENTER
     # ================================================================
+
+    def update_tile_bounding_volume(
+        self,
+        tile,
+    ):
+
+        aabbs = []
+
+        if "_clip_bounds" in tile:
+
+            bounds = tile.pop(
+                "_clip_bounds"
+            )
+
+            aabb = self.bounds_to_6(
+                bounds
+            )
+
+            if aabb is not None:
+
+                aabbs.append(
+                    aabb
+                )
+
+        else:
+
+            box = (
+                (tile.get("boundingVolume") or {})
+                .get("box")
+            )
+
+            if box is not None:
+
+                aabb = self.box_to_aabb6(
+                    box
+                )
+
+                if aabb is not None:
+
+                    aabbs.append(
+                        aabb
+                    )
+
+        for child in tile.get(
+            "children",
+            [],
+        ):
+
+            child_box = (
+                (child.get("boundingVolume") or {})
+                .get("box")
+            )
+
+            if child_box is None:
+                continue
+
+            aabb = self.box_to_aabb6(
+                child_box,
+                child.get(
+                    "transform"
+                ),
+            )
+
+            if aabb is not None:
+
+                aabbs.append(
+                    aabb
+                )
+
+        merged = self.merge_aabb6(
+            aabbs
+        )
+
+        if merged is None:
+            return
+
+        tile[
+            "boundingVolume"
+        ] = self.make_box_bounding_volume(
+            merged
+        )
+
+    def box_to_aabb6(
+        self,
+        box,
+        transform=None,
+    ):
+
+        box = np.asarray(
+            box,
+            dtype=np.float64,
+        ).reshape(
+            -1
+        )
+
+        if box.shape[0] != 12:
+            return None
+
+        center = box[0:3]
+        x_axis = box[3:6]
+        y_axis = box[6:9]
+        z_axis = box[9:12]
+
+        corners = []
+
+        for sx in (-1.0, 1.0):
+
+            for sy in (-1.0, 1.0):
+
+                for sz in (-1.0, 1.0):
+
+                    corners.append(
+                        center
+                        + sx * x_axis
+                        + sy * y_axis
+                        + sz * z_axis
+                    )
+
+        corners = np.asarray(
+            corners,
+            dtype=np.float64,
+        )
+
+        if transform is not None:
+
+            matrix = (
+                self.parse_tileset_transform(
+                    transform
+                )
+            )
+
+            if not self.is_identity_matrix(
+                matrix
+            ):
+
+                corners = (
+                    self.transform_points(
+                        corners,
+                        matrix,
+                    )
+                )
+
+        mn = corners.min(
+            axis=0
+        )
+
+        mx = corners.max(
+            axis=0
+        )
+
+        return np.array(
+
+            [
+                mn[0],
+                mn[1],
+                mn[2],
+                mx[0],
+                mx[1],
+                mx[2],
+            ],
+
+            dtype=np.float64,
+        )
+
+    @staticmethod
+    def merge_aabb6(
+        aabbs,
+    ):
+
+        if not aabbs:
+            return None
+
+        arr = np.asarray(
+            aabbs,
+            dtype=np.float64,
+        )
+
+        if arr.ndim == 1:
+
+            arr = arr.reshape(
+                1,
+                -1,
+            )
+
+        return np.array(
+
+            [
+                arr[:, 0].min(),
+                arr[:, 1].min(),
+                arr[:, 2].min(),
+                arr[:, 3].max(),
+                arr[:, 4].max(),
+                arr[:, 5].max(),
+            ],
+
+            dtype=np.float64,
+        )
 
     @staticmethod
     def make_box_bounding_volume(
         bounds,
+        pad=0.05,
     ):
 
         bounds = np.asarray(
@@ -4582,17 +4829,17 @@ class Clip3dTiles:
         hx = (
             max_x
             - min_x
-        ) * 0.5
+        ) * 0.5 + pad
 
         hy = (
             max_y
             - min_y
-        ) * 0.5
+        ) * 0.5 + pad
 
         hz = (
             max_z
             - min_z
-        ) * 0.5
+        ) * 0.5 + pad
 
         return {
 
