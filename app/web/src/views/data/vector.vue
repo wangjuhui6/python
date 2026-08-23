@@ -45,6 +45,7 @@
     </el-card> -->
     <ShpToGlb />
     <Crop3dTiles />
+    <LineDeduplicator />
   </div>
 </template>
 
@@ -55,6 +56,7 @@ import { ElMessage } from 'element-plus'
 import { geojsonToShp, osmPbfToMbtiles } from '@/api/gdal'
 import ShpToGlb from './commponents/vector/shpToGlb.vue'
 import Crop3dTiles from './commponents/vector/crop3dTiles.vue'
+import LineDeduplicator from './commponents/vector/lineDeduplicator.vue'
 
 // geoJSON转Shapefile
 const oneData = reactive({

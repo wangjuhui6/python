@@ -26,3 +26,12 @@ export async function selectSavePath(data: any): Promise<string> {
     data
   })
 }
+
+// 保存文件路径 保存文件名
+export async function selectSavePathAndFileName(data: any): Promise<string> {
+  return await service({
+    url: '/tkinter/save_path_and_file_name',
+    method: 'post',
+    data
+  })
+}

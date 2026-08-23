@@ -44,3 +44,12 @@ export async function clip3dTiles(data: any): Promise<string> {
     data
   })
 }
+
+// 线去重
+export async function lineDeduplication(data: any): Promise<string> {
+  return await service({
+    url: '/gdal/lineDeduplication',
+    method: 'post',
+    data
+  })
+}

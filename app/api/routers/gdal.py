@@ -8,6 +8,7 @@ import geopandas as gpd
 from utils.shpToGlb import ShpToGlb
 from utils.clip3dTiles import Clip3dTiles
 from utils.clip3dTilesNew import Clip3dTilesNew
+from utils.lineDeduplication import LineDeduplicator
 
 # todo geojson转shp成功了
 # 后续看看还有哪些功能 将这些都集成一下
@@ -287,4 +288,18 @@ def clip3dTiles(data: dict):
     code=200 if clip3dTiles else 500,
     msg="裁剪3dtiles成功" if clip3dTiles else "裁剪3dtiles失败",
     data=True if clip3dTiles else False
+  )
+
+# 线去重
+@router.post("/lineDeduplication")
+def lineDeduplication(data: dict):
+  inputPath = data.get('inputPath')
+  outputPath = data.get('outputPath')
+  deduplicator = LineDeduplicator()
+  result = deduplicator.process_geojson(inputPath, outputPath)
+  success = bool(result)
+  return ResponseModel(
+    code=200 if success else 500,
+    msg="线去重成功" if success else "线去重失败",
+    data=success
   )

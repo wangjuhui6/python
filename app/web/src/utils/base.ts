@@ -2,6 +2,7 @@ import {
   selectFile as selectFileApi,
   selectFolder as selectFolderApi,
   selectSavePath as selectSavePathApi,
+  selectSavePathAndFileName as selectSavePathAndFileNameApi,
 } from '@/api/file'
 
 // 数据类型对应表
@@ -57,6 +58,14 @@ export async function selectFolder(dataType?: string) {
 // 选择要保存的文件路径
 export async function selectSavePath(dataType?: string) {
   const res = await selectSavePathApi({
+    filetypes: dataTypes[dataType as keyof typeof dataTypes],
+  })
+  return res
+}
+
+// 保存文件路径 保存文件名
+export async function selectSavePathAndFileName(dataType?: string) {
+  const res = await selectSavePathAndFileNameApi({
     filetypes: dataTypes[dataType as keyof typeof dataTypes],
   })
   return res

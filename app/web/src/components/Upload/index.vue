@@ -7,14 +7,14 @@
 </template>
 
 <script lang="ts" setup>
-import { selectFile, selectFolder, selectSavePath } from '@/utils/base'
+import { selectFile, selectFolder, selectSavePath, selectSavePathAndFileName } from '@/utils/base'
 
 interface Props {
   dataType?: string,
   value: string,
   placeholder?: string,
   label?: string,
-  type?: 'file' | 'folder' | 'savePath',
+  type?: 'file' | 'folder' | 'savePath' | 'savePathAndFileName',
 }
 
 const props = withDefaults(defineProps<Props>(), {
@@ -33,6 +33,7 @@ const typeMap = {
   file: selectFile,
   folder: selectFolder,
   savePath: selectSavePath,
+  savePathAndFileName: selectSavePathAndFileName,
 }
 
 async function handleSelectFile() {

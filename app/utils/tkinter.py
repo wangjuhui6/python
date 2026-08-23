@@ -45,3 +45,17 @@ def select_save_path(filetypes=None):
   )
   root.destroy()
   return path
+
+# 保存文件路径 保存文件名
+def select_save_path_and_file_name(filetypes=None):
+  root = tk.Tk()
+  root.geometry("0x0")
+  root.overrideredirect(True)
+  root.attributes("-topmost", True)
+  root.update()
+  path = filedialog.asksaveasfilename(
+    parent=root,
+    filetypes=filetypes if filetypes else [("All Files", "*.*")]
+  )
+  root.destroy()
+  return path
