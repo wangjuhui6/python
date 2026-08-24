@@ -1,14 +1,31 @@
-import threading
-import uvicorn
-from api.start import api
-import webbrowser
-import pystray
-from PIL import Image
-from pystray import MenuItem as item
-import os
 import sys
-from base import HOST, PORT, get_request_path
-from dev import start_postgis
+import traceback
+
+
+def pause_console(message="发生错误，按回车键退出..."):
+  """双击运行打包后的 exe 时，进程退出会立刻关掉控制台，暂停以便查看日志。"""
+  if getattr(sys, "frozen", False):
+    try:
+      input(f"\n{message}")
+    except (EOFError, OSError):
+      import time
+      time.sleep(10)
+
+
+try:
+  import threading
+  import uvicorn
+  from api.start import api
+  import webbrowser
+  import pystray
+  from PIL import Image
+  from pystray import MenuItem as item
+  from base import HOST, PORT, get_request_path
+  from dev import start_postgis
+except Exception:
+  traceback.print_exc()
+  pause_console()
+  sys.exit(1)
 
 # 启动 FastAPI 服务
 def run_server():
@@ -39,16 +56,22 @@ def create_tray_icon():
     icon = pystray.Icon("Map Tool", image, menu=menu)
     icon.run()
   except Exception as e:
-    import traceback
+    traceback.print_exc()
     with open("error.log", "w") as f:
         traceback.print_exc(file=f)
     print(f"错误: {e}")
+    pause_console()
 
 # 启动服务
 if __name__ == "__main__":
-  start_postgis()
-  # 启动web与接口服务
-  server_thread = threading.Thread(target=run_server, daemon=True)
-  server_thread.start()
-  # 创建托盘图标
-  icon = create_tray_icon()
+  try:
+    start_postgis()
+    # 启动web与接口服务
+    server_thread = threading.Thread(target=run_server, daemon=True)
+    server_thread.start()
+    # 创建托盘图标
+    create_tray_icon()
+  except Exception:
+    traceback.print_exc()
+    pause_console()
+    sys.exit(1)

@@ -1,19 +1,25 @@
 # sqlite 数据库
+import sys
+from pathlib import Path
 from sqlalchemy import create_engine, Column, Integer, String
 from sqlalchemy.ext.declarative import declarative_base
-from sqlalchemy import create_engine
-from pathlib import Path
 from sqlalchemy.orm import sessionmaker
 
-# 获取项目根目录
-BASE_DIR = Path(__file__).resolve().parent.parent
+def _get_base_dir() -> Path:
+    if getattr(sys, "frozen", False):
+        # 打包后写到 exe 同级目录，避免写入只读/临时解压目录
+        return Path(sys.executable).resolve().parent
+    return Path(__file__).resolve().parent.parent
+
+# 获取项目根目录（开发）或 exe 所在目录（打包）
+BASE_DIR = _get_base_dir()
 # 获取数据库路径
 db_path = BASE_DIR / 'sql' / 'record.db'
 # 创建数据库目录
-# db_path.parent.mkdir(parents=True, exist_ok=True)
+db_path.parent.mkdir(parents=True, exist_ok=True)
 
 # 创建数据库引擎
-engine = create_engine(f'sqlite:///{db_path}', echo=True)  # echo=True 打印SQL日志
+engine = create_engine(f'sqlite:///{db_path.as_posix()}', echo=True)  # echo=True 打印SQL日志
 
 # 3. 定义模型
 Base = declarative_base()
