@@ -99,10 +99,8 @@ async function save() {
     return
   }
   const res: any = await generateGlb(data as any)
-  if (res.code === 200) {
+  if (res) {
     ElMessage.success('生成白膜成功')
-  } else {
-    ElMessage.error(res.msg)
   }
 }
 

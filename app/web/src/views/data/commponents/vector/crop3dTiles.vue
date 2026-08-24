@@ -77,10 +77,8 @@ async function save() {
     return
   }
   const res: any = await clip3dTiles(data as any)
-  if (res.code === 200) {
+  if (res) {
     ElMessage.success('裁剪成功')
-  } else {
-    ElMessage.error(res.msg)
   }
 }
 

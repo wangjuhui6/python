@@ -38,10 +38,8 @@ const handleLineDeduplication = async () => {
     inputPath: oneData.value.file,
     outputPath: oneData.value.savePath,
   })
-  if (res.code === 200) {
+  if (res) {
     ElMessage.success('线去重成功')
-  } else {
-    ElMessage.error(res.msg)
   }
 }
 </script>
