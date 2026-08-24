@@ -48,3 +48,30 @@ def read_root(params: FileTypes):
     msg="选择要保存的文件路径和文件名成功" if data else "选择要保存的文件路径和文件名失败",
     data=data
   )
+
+# 根据文件路径与内容生成文件
+@router.post("/generate_file")
+def read_root(params: dict):
+  file_path = params.get('file_path')
+  content = params.get('content')
+  with open(file_path, 'w') as f:
+    f.write(content)
+  return ResponseModel(
+    code=200,
+    msg="生成文件成功",
+    data=None
+  )
+
+# 读取多个文件的内容
+@router.post("/read_multiple_files")
+def read_root(data: dict):
+  file_paths = data.get('files')
+  content = []
+  for file_path in file_paths:
+    with open(file_path, 'r') as f:
+      content.append(f.read())
+  return ResponseModel(
+    code=200,
+    msg="读取多个文件的内容成功",
+    data=content
+  )

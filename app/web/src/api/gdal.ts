@@ -53,3 +53,21 @@ export async function lineDeduplication(data: any): Promise<string> {
     data
   })
 }
+
+// 读取多个文件的内容
+export async function readMultipleFiles(data: any): Promise<string> {
+  return await service({
+    url: '/tkinter/read_multiple_files',
+    method: 'post',
+    data
+  })
+}
+
+// 生成文件
+export async function generateFile(data: any): Promise<string> {
+  return await service({
+    url: '/tkinter/generate_file',
+    method: 'post',
+    data
+  })
+}
