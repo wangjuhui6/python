@@ -1,9 +1,8 @@
 from fastapi import FastAPI
 from fastapi import APIRouter
-from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from .routers import base, data, gdal, tkinter, record, postgis
-import os
+from base import get_request_path
 
 api = FastAPI()
 
@@ -19,9 +18,8 @@ api_router.include_router(postgis.router)
 
 api.include_router(api_router)
 
-# 静态服务
-BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-WEB_DIR = os.path.join(BASE_DIR, "html")
+# 静态服务（打包后从解压目录读取 html）
+WEB_DIR = get_request_path("html")
 
 api.mount(
     "/",
