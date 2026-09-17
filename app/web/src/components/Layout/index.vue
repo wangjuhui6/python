@@ -59,6 +59,10 @@ routes.forEach((item: any) => {
 })
 
 function go(item: any) {
+  if (item.meta?.fullPage) {
+    router.push(item.redirect || item.children?.[0]?.path || item.path)
+    return
+  }
   const { path } = item
   router.push(path)
 }

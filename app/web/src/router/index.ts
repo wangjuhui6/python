@@ -78,6 +78,31 @@ export const routes: any[] = [
         component: () => import('../views/postgis/index.vue'),
       },
     ]
+  },
+  {
+    path: '/style',
+    name: 'style',
+    redirect: '/style/editor',
+    meta: {
+      title: '样式编辑',
+      fullPage: true
+    },
+    children: [
+      {
+        path: '/style/editor',
+        name: 'style-editor-nav',
+        meta: {
+          title: '样式编辑器'
+        }
+      },
+      {
+        path: '/style/sprite',
+        name: 'style-sprite-nav',
+        meta: {
+          title: '图标精灵图'
+        }
+      }
+    ]
   }
 ]
 
@@ -91,7 +116,17 @@ const router = createRouter({
     {
       path: '/layout',
       component: () => import('../components/Layout/index.vue'),
-      children: routes,
+      children: routes.filter((item: any) => !item.meta?.fullPage),
+    },
+    {
+      path: '/style/editor',
+      name: 'style-editor',
+      component: () => import('../views/style/index.vue')
+    },
+    {
+      path: '/style/sprite',
+      name: 'style-sprite',
+      component: () => import('../views/style/sprite.vue')
     },
     {
       path: '/postgis/features/map/:id',
