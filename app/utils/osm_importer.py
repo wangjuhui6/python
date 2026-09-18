@@ -1,140 +1,132 @@
-# pbf 流式读取，使用 osmium 库
+# pbf 流式读取：点走 node，线走 way，面走 osmium Area 组装
 import osmium
-from sqlalchemy import text
-import json
-from postgis.database import engine
 from osmium.geom import WKTFactory
 from postgis.server.featuresServer import add_features
 
+# 闭合 way 何时成面：与 osmtogeojson / iD polygon-features 对齐
+# True = 任意取值都是面；set = 仅这些取值是面
 POLYGON_KEYS = {
-  "building",
-  "landuse",
-  "natural",
-  "leisure",
-  "amenity",
-  "aeroway",
-  "boundary",
-  "place",
-  "water",
+  "building": True,
+  "landuse": True,
+  "amenity": True,
+  "leisure": True,
+  "harbour": True,
+  "historic": True,
+  "military": True,
+  "place": True,
+  "public_transport": True,
+  "office": True,
+  "shop": True,
+  "craft": True,
+  "tourism": True,
+  "golf": True,
+  "boundary": True,
+  "aerialway": True,
+  "healthcare": True,
+  "cemetery": True,
 }
+
+POLYGON_WHITELIST = {
+  "highway": {"services", "rest_area", "escape", "platform"},
+  "railway": {"station", "turntable", "roundhouse", "platform"},
+  "waterway": {"riverbank", "dock", "boatyard", "dam"},
+  "power": {"plant", "substation", "generator", "transformer"},
+}
+
+# 这些 key 默认是面，下列取值除外（仍是线）
+POLYGON_EXCEPT = {
+  "natural": {"coastline", "cliff", "ridge", "arete", "tree_row"},
+  "man_made": {"cutline", "embankment", "pipeline"},
+  "aeroway": {"taxiway", "runway"},
+}
+
+
+def tags_dict(obj):
+  return dict(obj.tags)
+
+
+def closed_way_is_polygon(tags: dict) -> bool:
+  if not tags:
+    return False
+  area = tags.get("area")
+  if area == "no":
+    return False
+  if area == "yes":
+    return True
+  for key in POLYGON_KEYS:
+    if key in tags:
+      return True
+  for key, values in POLYGON_WHITELIST.items():
+    if tags.get(key) in values:
+      return True
+  for key, excluded in POLYGON_EXCEPT.items():
+    value = tags.get(key)
+    if value is not None and value not in excluded:
+      return True
+  return False
+
 
 class PBFImporter(osmium.SimpleHandler):
   def __init__(self, file_path, datasets_id, batch_size=5000):
     super().__init__()
     self.wkt = WKTFactory()
-    self.file_path = file_path # 文件路径
-    self.datasets_id = datasets_id # 数据源id
-    self.batch_size = batch_size # 批量大小
-    self.cache = [] # 缓存
-  
+    self.file_path = file_path
+    self.datasets_id = datasets_id
+    self.batch_size = batch_size
+    self.cache = []
+
   def append(self, feature):
     self.cache.append(feature)
-
     if len(self.cache) >= self.batch_size:
-        self.flush()
+      self.flush()
 
   def flush(self):
-
     if not self.cache:
       return
-
-    batch = self.cache.copy()
-
-    # 批量添加数据
+    batch = self.cache
+    self.cache = []
     result = add_features(batch)
     if not result:
       raise Exception("添加数据失败")
 
-    self.cache = []
+  def _feature(self, geom, tags):
+    return {
+      "dataset_id": self.datasets_id,
+      "geom": geom,
+      "properties": tags,
+    }
 
   def node(self, n):
     if len(n.tags) == 0:
       return
-
-    feature = {
-      'dataset_id': self.datasets_id,
-      'geom': self.wkt.create_point(n),
-      'properties': json.dumps(dict(n.tags), ensure_ascii=False)
-    }
-    
-    self.append(feature)
-
-  # 判断是否是面
-  def is_polygon(self, w):
-    tags = dict(w.tags)
-
-    # 明确指定是面
-    if tags.get("area") == "yes":
-      return True
-
-    # 明确指定不是面
-    if tags.get("area") == "no":
-      return False
-
-    # 必须闭合
-    if not w.is_closed():
-      return False
-
-    # 根据 Tag 判断
-    for key in POLYGON_KEYS:
-      if key in tags:
-        return True
-      return False
-  
-  # 获取几何体类型
-  def way_geometry_type(self, way):
-    if self.is_polygon(way):
-      return "Polygon"
-    return "LineString"
-
-  # 获取关系几何体类型
-  def relation_geometry_type(self, relation):
-    tags = dict(relation.tags)
-    relation_type = tags.get("type")
-    if relation_type == "multipolygon":
-      return "MultiPolygon"
-    if relation_type == "boundary":
-      return "MultiPolygon"
-    return None
-
+    try:
+      geom = self.wkt.create_point(n)
+    except Exception:
+      return
+    self.append(self._feature(geom, tags_dict(n)))
 
   def way(self, w):
+    tags = tags_dict(w)
+    if not tags:
+      return
+    # 闭合且按 tag 是面：交给 area()，避免和外环重复
+    if w.is_closed() and closed_way_is_polygon(tags):
+      return
     try:
-      geometry_type = self.way_geometry_type(w)
-      
-      if geometry_type == "Polygon":
-        geom = self.wkt.create_polygon(w)
-      else:
-        geom = self.wkt.create_linestring(w)
-
-      feature = {
-        "dataset_id": self.datasets_id,
-        "geom": geom,
-        "properties": json.dumps(dict(w.tags), ensure_ascii=False)
-      }
-
-      self.append(feature)
-
+      geom = self.wkt.create_linestring(w)
     except Exception:
       return
+    self.append(self._feature(geom, tags))
 
-  def relation(self, r):
+  def area(self, a):
+    tags = tags_dict(a)
+    if not tags:
+      return
+    # osmium 会对几乎所有闭合 way 调 area()，环岛等线性闭合要素在这里丢掉
+    if a.from_way() and not closed_way_is_polygon(tags):
+      return
     try:
-      geometry_type = self.relation_geometry_type(r)
-      if geometry_type is None:
-        return
-      # Relation 转 WKT（根据你的实现）
-      geom = self.wkt.create_multipolygon(r)
-      
-      feature = {
-        "dataset_id": self.datasets_id,
-        "geom": geom,
-        "properties": json.dumps(dict(r.tags), ensure_ascii=False)
-      }
-      self.append(feature)
+      geom = self.wkt.create_multipolygon(a)
     except Exception:
       return
-    
-  def finish(self):
-    """导入完成后，将最后不足 batch_size 的数据写入数据库"""
-    self.flush()
+    self.append(self._feature(geom, tags))

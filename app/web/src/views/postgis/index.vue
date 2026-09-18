@@ -31,6 +31,9 @@
               <template v-for="(val, index) in item.mapping" :key="index">
                 <div>{{ val.oldValue }} => {{ val.newValue }}</div>
               </template>
+              <template v-if="item.categories?.length">
+                <div>分类 {{ item.categories.length }} 项（show {{ item.categories.filter((c: any) => c.show).length }} 将进入 mbtiles）</div>
+              </template>
             </el-col>
           </el-row>
         </el-collapse-item>
@@ -41,7 +44,7 @@
   <el-dialog
     v-model="dialogVisible"
     title="数据源"
-    width="700"
+    width="960"
     :before-close="handleClose"
   >
     <el-form :model="formData" label-width="80px" :rules="rules" ref="addFormRef">
@@ -90,6 +93,11 @@
             <el-button :icon="Plus" @click="addMapping">新增</el-button>
           </el-form-item>
         </el-col>
+        <el-col :span="24">
+          <el-form-item label="数据分类">
+            <CategoryEditor v-model="formData.categories" :dataset-id="formData.id" />
+          </el-form-item>
+        </el-col>
       </el-row>
     </el-form>
     <template #footer>
@@ -117,6 +125,7 @@ import { getDatasets as getDatasetsApi,
 import { ElMessage } from 'element-plus'
 import AddData from './components/addData.vue'
 import ShowKeys from './components/showKeys.vue'
+import CategoryEditor from './components/CategoryEditor.vue'
 import { useRouter } from 'vue-router'
 
 const router = useRouter()
@@ -148,11 +157,13 @@ const rules = reactive({
 })
 
 const baseFormData: any = {
+  id: undefined,
   name: '',
   code: '',
   srid: 'WGS84',
   description: '',
   mapping: [],
+  categories: [],
 }
 
 const addFormRef = ref<any>()
@@ -161,8 +172,12 @@ const formData = reactive({...baseFormData})
 
 function addDataset(data?: any) {
   dialogVisible.value = true
+  Object.assign(formData, JSON.parse(JSON.stringify(baseFormData)))
   if (data) {
-    Object.assign(formData, data)
+    Object.assign(formData, JSON.parse(JSON.stringify(data)))
+    if (!Array.isArray(formData.categories)) {
+      formData.categories = []
+    }
   }
 }
 
@@ -195,13 +210,16 @@ async function getDatasetsFun() {
   const newData = res
   newData.forEach((item: any) => {
     const mapping: any = []
-    Object.keys(item.mapping).forEach((key: string) => {
+    Object.keys(item.mapping || {}).forEach((key: string) => {
       mapping.push({
         oldValue: key,
         newValue: item.mapping[key],
       })
     })
     item.mapping = mapping
+    if (!Array.isArray(item.categories)) {
+      item.categories = []
+    }
   })
   list.value = newData
 }
@@ -210,7 +228,7 @@ getDatasetsFun()
 
 const dialogVisible = ref(false)
 function handleClose() {
-  Object.assign(formData, baseFormData)
+  Object.assign(formData, JSON.parse(JSON.stringify(baseFormData)))
 }
 
 async function save() {
@@ -224,6 +242,7 @@ async function save() {
     }
   })
   _formData.mapping = JSON.stringify(mapping)
+  _formData.categories = Array.isArray(_formData.categories) ? _formData.categories : []
   const res: any = await addDatasetApi(_formData)
   if (res) {
     ElMessage.success('添加成功')

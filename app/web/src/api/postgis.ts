@@ -9,6 +9,21 @@ export async function getDatasets(params: any): Promise<string> {
   })
 }
 
+export async function getDataset(id: number | string): Promise<any> {
+  return await service({
+    url: `/postgis/datasets/${id}`,
+    method: 'get',
+  })
+}
+
+export async function updateDatasetCategories(data: any): Promise<any> {
+  return await service({
+    url: '/postgis/datasets/categories',
+    method: 'post',
+    data,
+  })
+}
+
 // 新增/编辑数据源
 export async function addDataset(data: any): Promise<string> {
   return await service({
@@ -37,11 +52,19 @@ export async function importData(data: any): Promise<string> {
 }
 
 // 根据数据源id查询数据
-export async function listFeatures(params: any): Promise<string> {
+export async function listFeatures(params: any): Promise<any> {
   return await service({
     url: '/postgis/features/list',
     method: 'get',
     params
+  })
+}
+
+export async function listFeaturesAtPoint(params: any): Promise<any> {
+  return await service({
+    url: '/postgis/features/at-point',
+    method: 'get',
+    params,
   })
 }
 

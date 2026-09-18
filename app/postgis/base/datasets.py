@@ -20,4 +20,7 @@ class Dataset(Base):
 
   mapping: Mapped[dict] = mapped_column(JSONB, default=dict, server_default='{}')
 
+  # 分类：geom_type + key/value + minZoom/maxZoom/show，供地图筛选与后续 mbtiles
+  categories: Mapped[list] = mapped_column(JSONB, default=list, server_default='[]')
+
   created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now())

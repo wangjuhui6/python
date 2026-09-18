@@ -11,7 +11,7 @@ class Feature(Base):
 
   id: Mapped[int] = mapped_column(primary_key=True)
 
-  dataset_id: Mapped[int] = mapped_column(Integer)
+  dataset_id: Mapped[int] = mapped_column(Integer, index=True)
 
   geom = mapped_column(
     Geometry(

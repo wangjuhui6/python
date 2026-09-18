@@ -26,6 +26,27 @@ def add_dataset(data: dict):
     data=id
   )
 
+@router.get("/datasets/{dataset_id}")
+def get_dataset(dataset_id: int):
+  dataset = datasets_server_methods.get_dataset(dataset_id)
+  return ResponseModel(
+    code=200 if dataset else 404,
+    msg="查询数据源成功" if dataset else "数据源不存在",
+    data=dataset
+  )
+
+@router.post("/datasets/categories")
+def update_dataset_categories(data: dict):
+  dataset = datasets_server_methods.update_dataset_categories(
+    data.get('datasets_id') or data.get('id'),
+    data.get('categories'),
+  )
+  return ResponseModel(
+    code=200 if dataset else 404,
+    msg="分类已更新" if dataset else "数据源不存在",
+    data=dataset
+  )
+
 @router.post("/datasets/delete")
 def delete_dataset(data: dict):
   result = datasets_server_methods.delete_dataset(data.get('id'))
@@ -68,6 +89,34 @@ def list_features(request: Request):
   params = dict(request.query_params)
   is_geojson = params.get('is_geojson') or False
   datasets_id = params.get('datasets_id')
+  uncategorized = str(params.get('uncategorized') or '').lower() in ('1', 'true', 'yes')
+  if uncategorized:
+    page = int(params.get('page') or 1)
+    page_size = int(params.get('page_size') or 10)
+    features = features_server_methods.get_uncategorized_features(datasets_id, page=page, page_size=page_size)
+    return ResponseModel(
+      code=200,
+      msg="查询未分类数据成功",
+      data=features
+    )
+  bbox = params.get('bbox')
+  if bbox:
+    parts = [float(v) for v in bbox.split(',')]
+    if len(parts) != 4:
+      return ResponseModel(code=400, msg="bbox 应为 west,south,east,north", data=False)
+    west, south, east, north = parts
+    zoom = float(params.get('zoom') or 10)
+    limit = int(params.get('limit') or 4000)
+    raw_ids = params.get('category_ids') or ''
+    category_ids = [item for item in raw_ids.split(',') if item]
+    features = features_server_methods.get_features_in_bbox(
+      datasets_id, west, south, east, north, zoom=zoom, limit=limit, category_ids=category_ids
+    )
+    return ResponseModel(
+      code=200,
+      msg="查询数据成功",
+      data=features
+    )
   page = params.get('page') or 1
   page_size = params.get('page_size') or 1000
   page = int(page)
@@ -82,6 +131,27 @@ def list_features(request: Request):
   return ResponseModel(
     code=200,
     msg="查询数据成功",
+    data=data
+  )
+
+@router.get("/features/at-point")
+def features_at_point(request: Request):
+  params = dict(request.query_params)
+  try:
+    lng = float(params.get('lng'))
+    lat = float(params.get('lat'))
+  except (TypeError, ValueError):
+    return ResponseModel(code=400, msg="缺少有效的 lng/lat", data=False)
+  data = features_server_methods.get_features_at_point(
+    params.get('datasets_id'),
+    lng,
+    lat,
+    zoom=float(params.get('zoom') or 14),
+    limit=int(params.get('limit') or 80),
+  )
+  return ResponseModel(
+    code=200,
+    msg="查询点击位置数据成功",
     data=data
   )
 

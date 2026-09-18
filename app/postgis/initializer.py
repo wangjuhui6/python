@@ -12,7 +12,11 @@ class DatabaseInitializer:
 
       self.create_tables()
 
-      # self.create_indexes()
+      self.create_indexes()
+
+      self.migrate_columns()
+
+      self.migrate_properties_json()
 
       print("数据库初始化完成")
 
@@ -33,3 +37,29 @@ class DatabaseInitializer:
    def create_tables(self):
       Dataset.metadata.create_all(bind=engine)
       Feature.metadata.create_all(bind=engine)
+
+   def create_indexes(self):
+      with engine.begin() as conn:
+         conn.execute(text("""
+            CREATE INDEX IF NOT EXISTS ix_features_dataset_id ON features (dataset_id);
+         """))
+         conn.execute(text("""
+            CREATE INDEX IF NOT EXISTS ix_features_geom ON features USING GIST (geom);
+         """))
+
+   def migrate_columns(self):
+      with engine.begin() as conn:
+         conn.execute(text("""
+            ALTER TABLE datasets
+            ADD COLUMN IF NOT EXISTS categories JSONB DEFAULT '[]'::jsonb;
+         """))
+
+   def migrate_properties_json(self):
+      # 旧导入把 tag 写成了 JSON 字符串，分类条件匹配不到
+      with engine.begin() as conn:
+         conn.execute(text("""
+            UPDATE features
+            SET properties = (trim(properties #>> '{}'))::jsonb
+            WHERE jsonb_typeof(properties) = 'string'
+              AND left(trim(properties #>> '{}'), 1) IN ('{', '[');
+         """))
