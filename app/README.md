@@ -57,3 +57,12 @@ coll = COLLECT(
 进入容器 docker exec -it postgis bash
 进入数据库 psql -U gis -d gisdb
 检查 SELECT PostGIS_Version();
+
+
+# pip install llama-cpp-python 安装问题
+
+pip install https://github.com/abetlen/llama-cpp-python/releases/download/v0.3.19/llama_cpp_python-0.3.19-cp313-cp313-win_amd64.whl
+
+或
+
+pip install llama-cpp-python==0.3.19 --only-binary=:all: --extra-index-url https://abetlen.github.io/llama-cpp-python/whl/cpu

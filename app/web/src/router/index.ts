@@ -80,6 +80,32 @@ export const routes: any[] = [
     ]
   },
   {
+    path: '/system',
+    name: 'system',
+    redirect: '/system/llm',
+    meta: {
+      title: '系统设置'
+    },
+    children: [
+      {
+        path: '/system/llm',
+        name: 'system-llm',
+        meta: {
+          title: '本地模型'
+        },
+        component: () => import('../views/llm/index.vue'),
+      },
+      {
+        path: '/system/transform',
+        name: 'system-transform',
+        meta: {
+          title: '描述转换'
+        },
+        component: () => import('../views/llm/transform.vue'),
+      },
+    ]
+  },
+  {
     path: '/style',
     name: 'style',
     redirect: '/style/editor',

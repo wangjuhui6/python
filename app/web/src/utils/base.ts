@@ -15,6 +15,7 @@ export const dataTypes = {
   psv: [['PSV', '*.psv']],
   xlsx: [['XLSX', '*.xlsx']],
   xls: [['XLS', '*.xls']],
+  table: [['Excel', '*.xlsx'], ['CSV', '*.csv'], ['JSON', '*.json'], ['Excel 97', '*.xls']],
   pdf: [['PDF', '*.pdf']],
   geoJSON: [['GeoJSON', '*.geojson']],
   topoJSON: [['TopoJSON', '*.topojson']],
@@ -37,6 +38,8 @@ export const dataTypes = {
   lz4: [['LZ4', '*.lz4']],
   mbtiles: [['MBTiles', '*.mbtiles']],
   osmPbf: [['OSM PBF', '*.pbf']],
+  gguf: [['GGUF', '*.gguf']],
+  mapping: [['Markdown', '*.md'], ['CSV', '*.csv'], ['Excel', '*.xlsx'], ['JSON', '*.json']],
 }
 
 // 选择文件

@@ -8,9 +8,11 @@ app/utils/__pycache__/
 app/data/__pycache__/
 app/server/__pycache__/
 app/sql/
+app/config/
 app/db/
 app/postgis-data/
 app/postgis/__pycache__/
 app/api/routers/__pycache__/
 app/postgis/base/__pycache__/
 app/postgis/server/__pycache__/
+model-data/
