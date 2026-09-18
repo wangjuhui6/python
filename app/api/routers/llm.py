@@ -1,9 +1,10 @@
-from fastapi import APIRouter
+from fastapi import APIRouter, File, Form, UploadFile
 from pydantic import BaseModel
 
 from llm.config import CONFIG_PATH, load_config, save_config
 from llm.engine import chat, list_models, load, runtime_status, unload
 from llm.io_preview import peek
+from llm.map_legend import recognize_map
 from llm.transform import apply_plan, make_plan, run_instruction
 from utils.response import ResponseModel
 
@@ -13,6 +14,7 @@ router = APIRouter(prefix="/llm", tags=["LLM"])
 class ConfigBody(BaseModel):
   model_dir: str | None = None
   model_path: str | None = None
+  mmproj_path: str | None = None
   n_ctx: int | None = None
   n_threads: int | None = None
   n_gpu_layers: int | None = None
@@ -23,6 +25,7 @@ class ConfigBody(BaseModel):
 
 class LoadBody(BaseModel):
   model_path: str | None = None
+  mmproj_path: str | None = None
 
 
 class ChatBody(BaseModel):
@@ -86,7 +89,7 @@ def models(model_dir: str | None = None):
 @router.post("/load")
 def load_model(params: LoadBody):
   try:
-    data = load(params.model_path)
+    data = load(params.model_path, mmproj_path=params.mmproj_path)
     data["config_path"] = str(CONFIG_PATH)
     return ResponseModel(msg="模型已加载", data=data)
   except Exception as exc:
@@ -174,3 +177,40 @@ def run_transform(params: RunBody):
     ))
   except Exception as exc:
     return ResponseModel(code=201, msg=str(exc), data=None)
+
+
+@router.post("/map-legend")
+async def map_legend_recognize(
+  file: UploadFile = File(...),
+  gcps: str = Form("[]"),
+  instruction: str = Form(""),
+):
+  import json
+  import uuid
+  from pathlib import Path
+
+  from base import get_writable_dir
+
+  raw_gcps = gcps or "[]"
+  try:
+    parsed = json.loads(raw_gcps)
+  except json.JSONDecodeError:
+    return ResponseModel(code=201, msg="控制点格式不正确", data=None)
+  if not isinstance(parsed, list) or len(parsed) < 2:
+    return ResponseModel(code=201, msg="请至少在图上标注 2 个控制点并填写经纬度", data=None)
+  suffix = Path(file.filename or "map.jpg").suffix.lower()
+  if suffix not in {".jpg", ".jpeg", ".png", ".webp", ".bmp", ".gif"}:
+    suffix = ".jpg"
+  dest_dir = Path(get_writable_dir()) / "data" / "map-legend"
+  dest_dir.mkdir(parents=True, exist_ok=True)
+  dest = dest_dir / f"{uuid.uuid4().hex}{suffix}"
+  dest.write_bytes(await file.read())
+  try:
+    data = recognize_map(str(dest), parsed, instruction)
+  except Exception as exc:
+    return ResponseModel(code=201, msg=str(exc), data=None)
+  data["image_path"] = str(dest)
+  geo_path = dest.with_suffix(".geojson")
+  geo_path.write_text(json.dumps(data.get("geojson") or {}, ensure_ascii=False, indent=2), encoding="utf-8")
+  data["geojson_path"] = str(geo_path)
+  return ResponseModel(data=data)

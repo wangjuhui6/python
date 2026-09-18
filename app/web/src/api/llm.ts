@@ -23,11 +23,11 @@ export async function listLlmModels(model_dir?: string): Promise<any> {
   })
 }
 
-export async function loadLlm(model_path?: string): Promise<any> {
+export async function loadLlm(model_path?: string, mmproj_path?: string): Promise<any> {
   return await service({
     url: '/llm/load',
     method: 'post',
-    data: { model_path },
+    data: { model_path, mmproj_path },
   })
 }
 
@@ -82,15 +82,10 @@ export async function applyLlmTransform(data: {
   })
 }
 
-export async function runLlmTransform(data: {
-  instruction: string
-  paths?: string[]
-  dry_run?: boolean
-  plan?: any
-}): Promise<any> {
+export async function recognizeMapLegend(formData: FormData): Promise<any> {
   return await service({
-    url: '/llm/run',
+    url: '/llm/map-legend',
     method: 'post',
-    data,
+    data: formData,
   })
 }

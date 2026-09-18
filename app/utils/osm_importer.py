@@ -1,6 +1,6 @@
 # pbf 流式读取：点走 node，线走 way，面走 osmium Area 组装
 import osmium
-from osmium.geom import WKTFactory
+from osmium.geom import WKBFactory
 from postgis.server.featuresServer import add_features
 
 # 闭合 way 何时成面：与 osmtogeojson / iD polygon-features 对齐
@@ -67,13 +67,14 @@ def closed_way_is_polygon(tags: dict) -> bool:
 
 
 class PBFImporter(osmium.SimpleHandler):
-  def __init__(self, file_path, datasets_id, batch_size=5000):
+  def __init__(self, file_path, datasets_id, batch_size=20000):
     super().__init__()
-    self.wkt = WKTFactory()
+    self.wkb = WKBFactory()
     self.file_path = file_path
     self.datasets_id = datasets_id
     self.batch_size = batch_size
     self.cache = []
+    self.imported = 0
 
   def append(self, feature):
     self.cache.append(feature)
@@ -88,6 +89,8 @@ class PBFImporter(osmium.SimpleHandler):
     result = add_features(batch)
     if not result:
       raise Exception("添加数据失败")
+    self.imported += len(batch)
+    print(f"PBF 已写入 {self.imported} 条")
 
   def _feature(self, geom, tags):
     return {
@@ -100,7 +103,7 @@ class PBFImporter(osmium.SimpleHandler):
     if len(n.tags) == 0:
       return
     try:
-      geom = self.wkt.create_point(n)
+      geom = self.wkb.create_point(n)
     except Exception:
       return
     self.append(self._feature(geom, tags_dict(n)))
@@ -113,7 +116,7 @@ class PBFImporter(osmium.SimpleHandler):
     if w.is_closed() and closed_way_is_polygon(tags):
       return
     try:
-      geom = self.wkt.create_linestring(w)
+      geom = self.wkb.create_linestring(w)
     except Exception:
       return
     self.append(self._feature(geom, tags))
@@ -126,7 +129,7 @@ class PBFImporter(osmium.SimpleHandler):
     if a.from_way() and not closed_way_is_polygon(tags):
       return
     try:
-      geom = self.wkt.create_multipolygon(a)
+      geom = self.wkb.create_multipolygon(a)
     except Exception:
       return
     self.append(self._feature(geom, tags))

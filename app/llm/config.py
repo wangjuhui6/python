@@ -10,6 +10,7 @@ CONFIG_PATH = CONFIG_DIR / "llm.json"
 DEFAULT_CONFIG = {
   "model_dir": "",
   "model_path": "",
+  "mmproj_path": "",
   "n_ctx": 2048,
   "n_threads": max(1, os.cpu_count() or 4),
   "n_gpu_layers": 0,

@@ -11,7 +11,13 @@ DATABASE_URL = "postgresql://gis:123456@localhost:5432/gisdb"
 engine = create_engine(
   DATABASE_URL,
   echo=False,
-  pool_pre_ping=True
+  pool_pre_ping=True,
+  connect_args={
+    "keepalives": 1,
+    "keepalives_idle": 30,
+    "keepalives_interval": 10,
+    "keepalives_count": 5,
+  },
 )
 
 # 创建会话

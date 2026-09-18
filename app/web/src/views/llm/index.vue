@@ -4,7 +4,7 @@
       <div class="llm-header">
         <span>本地模型</span>
         <el-tag :type="status.loaded ? 'success' : 'info'">
-          {{ status.loaded ? '已加载' : '未加载' }}
+          {{ status.loaded ? (status.vision_enabled ? '已加载（视觉）' : '已加载（文本）') : '未加载' }}
         </el-tag>
       </div>
     </template>
@@ -37,8 +37,18 @@
           type="file"
           dataType="gguf"
           label=""
-          placeholder="选择一个 .gguf 文件"
+          placeholder="选择语言模型 .gguf（视觉请选 Qwen2.5-VL 主文件）"
         />
+      </el-form-item>
+      <el-form-item label="视觉投影">
+        <Upload
+          v-model:value="form.mmproj_path"
+          type="file"
+          dataType="gguf"
+          label=""
+          placeholder="可选。看图时选 mmproj-model-f16.gguf，与主模型放同一目录可自动识别"
+        />
+        <span class="llm-hint">文本模型留空；视觉模型必须带上 mmproj，不是两个独立对话模型</span>
       </el-form-item>
       <el-form-item label="上下文长度">
         <el-input-number v-model="form.n_ctx" :min="512" :max="32768" :step="512" />
@@ -70,11 +80,24 @@
 
     <el-table :data="models" highlight-current-row @row-click="selectModel">
       <el-table-column prop="name" label="文件名" min-width="240" />
+      <el-table-column label="类型" width="100">
+        <template #default="scope">
+          {{ scope.row.kind === 'mmproj' ? '投影' : (scope.row.vision ? '视觉' : '文本') }}
+        </template>
+      </el-table-column>
       <el-table-column prop="size_mb" label="大小(MB)" width="120" />
       <el-table-column prop="path" label="路径" min-width="360" show-overflow-tooltip />
-      <el-table-column label="操作" width="120">
+      <el-table-column label="操作" width="140">
         <template #default="scope">
-          <el-button link type="primary" @click.stop="selectAndLoad(scope.row.path)">加载</el-button>
+          <el-button
+            v-if="scope.row.kind === 'mmproj'"
+            link
+            type="primary"
+            @click.stop="selectMmproj(scope.row.path)"
+          >
+            用作投影
+          </el-button>
+          <el-button v-else link type="primary" @click.stop="selectAndLoad(scope.row)">加载</el-button>
         </template>
       </el-table-column>
     </el-table>
@@ -102,6 +125,7 @@ import { chatLlm, getLlmConfig, listLlmModels, loadLlm, saveLlmConfig, unloadLlm
 const form = reactive({
   model_dir: '',
   model_path: '',
+  mmproj_path: '',
   n_ctx: 2048,
   n_threads: 4,
   n_gpu_layers: 0,
@@ -125,6 +149,7 @@ function applyStatus(data: any) {
   Object.assign(status, data || {})
   form.model_dir = data?.model_dir || ''
   form.model_path = data?.model_path || ''
+  form.mmproj_path = data?.mmproj_path || ''
   form.n_ctx = data?.n_ctx ?? 2048
   form.n_threads = data?.n_threads ?? 4
   form.n_gpu_layers = data?.n_gpu_layers ?? 0
@@ -156,10 +181,17 @@ async function saveConfig() {
 async function loadModel(path?: string) {
   loading.value = true
   try {
-    await saveLlmConfig({ ...form, model_path: path || form.model_path })
-    const data = await loadLlm(path || form.model_path)
+    const modelPath = path || form.model_path
+    const vision = /vl|llava|vision|minicpm-v/i.test(modelPath)
+    if (!vision) {
+      form.mmproj_path = ''
+    } else if (!form.mmproj_path) {
+      form.mmproj_path = siblingMmproj(modelPath)
+    }
+    await saveLlmConfig({ ...form, model_path: modelPath, mmproj_path: form.mmproj_path })
+    const data = await loadLlm(modelPath, form.mmproj_path || undefined)
     applyStatus(data)
-    ElMessage.success('模型已加载')
+    ElMessage.success(data?.vision_enabled ? '视觉模型已加载' : '模型已加载')
   } catch (err: any) {
     ElMessage.error(typeof err === 'string' ? err : '加载失败')
   } finally {
@@ -173,13 +205,30 @@ async function unloadModel() {
   ElMessage.success('已卸载')
 }
 
-function selectModel(row: any) {
-  form.model_path = row.path
+function dirOf(path: string) {
+  return (path || '').replace(/[\\/][^\\/]+$/, '').toLowerCase()
 }
 
-async function selectAndLoad(path: string) {
-  form.model_path = path
-  await loadModel(path)
+function siblingMmproj(modelPath: string) {
+  return models.value.find((item) => item.kind === 'mmproj' && dirOf(item.path) === dirOf(modelPath))?.path || ''
+}
+
+function selectMmproj(path: string) {
+  form.mmproj_path = path
+}
+
+function selectModel(row: any) {
+  if (row.kind === 'mmproj') {
+    form.mmproj_path = row.path
+    return
+  }
+  form.model_path = row.path
+  form.mmproj_path = row.vision ? siblingMmproj(row.path) : ''
+}
+
+async function selectAndLoad(row: any) {
+  selectModel(row)
+  await loadModel(row.path)
 }
 
 async function runChat() {

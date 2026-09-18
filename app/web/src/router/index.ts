@@ -103,6 +103,14 @@ export const routes: any[] = [
         },
         component: () => import('../views/llm/transform.vue'),
       },
+      {
+        path: '/system/map-legend',
+        name: 'system-map-legend',
+        meta: {
+          title: '地图图例识别'
+        },
+        component: () => import('../views/llm/mapLegend.vue'),
+      },
     ]
   },
   {

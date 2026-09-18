@@ -12,6 +12,9 @@
       <el-form-item label="文件路径" v-if="formData.data_type" prop="file_path">
         <Upload v-model:value="formData.file_path" :type="DATA_TYPE_OPTIONS_OBJ[formData.data_type].type" :dataType="DATA_TYPE_OPTIONS_OBJ[formData.data_type].dataType" />
       </el-form-item>
+      <el-form-item v-if="formData.data_type === 'pbf'">
+        <el-alert type="info" :closable="false" show-icon title="全国级 PBF（约 1GB+）导入会在后台批量写入，请保持页面打开，完成后会提示。" />
+      </el-form-item>
     </el-form>
     <template #footer>
       <div class="dialog-footer">

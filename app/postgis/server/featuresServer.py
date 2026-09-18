@@ -1,4 +1,4 @@
-from postgis.database import get_session
+from postgis.database import engine, get_session
 from postgis.base.features import Feature
 from postgis.base.datasets import Dataset
 from postgis.categories import apply_category_filter, apply_uncategorized_filter, parse_json_field
@@ -14,6 +14,8 @@ from geoalchemy2.functions import (
   ST_SimplifyPreserveTopology,
 )
 from sqlalchemy import case, func, text
+from datetime import datetime
+import io
 import json
 
 MAP_FEATURE_LIMIT = 4000
@@ -46,18 +48,82 @@ def add_feature(data: dict):
     session.commit()
     return feature.to_dict()
 
-# 批量添加数据
+def _wkb_to_ewkb_hex(wkb: bytes, srid: int = 4326) -> str:
+  endian = wkb[0]
+  little = endian == 1
+  geom_type = int.from_bytes(wkb[1:5], 'little' if little else 'big')
+  if geom_type & 0x20000000:
+    return wkb.hex()
+  geom_type |= 0x20000000
+  type_b = geom_type.to_bytes(4, 'little' if little else 'big')
+  srid_b = srid.to_bytes(4, 'little' if little else 'big')
+  return (wkb[:1] + type_b + srid_b + wkb[5:]).hex()
+
+
+def _geom_copy_value(geom):
+  if isinstance(geom, (bytes, bytearray, memoryview)):
+    return _wkb_to_ewkb_hex(bytes(geom))
+  if isinstance(geom, str):
+    s = geom.strip()
+    if s.startswith('SRID='):
+      return s
+    head = s[:20].upper()
+    if head.startswith(('POINT', 'LINE', 'POLY', 'MULTI', 'GEOM')):
+      return f'SRID=4326;{s}'
+    try:
+      return _wkb_to_ewkb_hex(bytes.fromhex(s))
+    except ValueError:
+      return _wkb_to_ewkb_hex(s.encode('latin-1'))
+  raise TypeError(f'不支持的几何类型: {type(geom)}')
+
+
+def _copy_escape(value: str) -> str:
+  return value.replace('\\', '\\\\').replace('\n', '\\n').replace('\r', '\\r').replace('\t', '\\t')
+
+
+# 批量添加数据（COPY，避免 ORM 逐条 INSERT）
 def add_features(data: list):
-  with get_session() as session:
-    for feature in data:
-      feature = Feature(
-        dataset_id=feature['dataset_id'],
-        geom=WKTElement(feature['geom'], srid=4326),
-        properties=feature['properties']
-      )
-      session.add(feature)
-    session.commit()
+  if not data:
     return True
+  now = datetime.now().isoformat(sep=' ', timespec='seconds')
+  buf = io.StringIO()
+  for feature in data:
+    props = json.dumps(feature['properties'], ensure_ascii=False, separators=(',', ':'))
+    buf.write(
+      f"{feature['dataset_id']}\t{_geom_copy_value(feature['geom'])}\t{_copy_escape(props)}\t{now}\t{now}\n"
+    )
+  buf.seek(0)
+  raw = engine.raw_connection()
+  try:
+    cur = raw.cursor()
+    cur.execute('SET LOCAL synchronous_commit = off')
+    cur.copy_from(
+      buf,
+      'features',
+      sep='\t',
+      columns=('dataset_id', 'geom', 'properties', 'created_at', 'updated_at'),
+    )
+    raw.commit()
+  except Exception:
+    raw.rollback()
+    raise
+  finally:
+    raw.close()
+  return True
+
+
+def drop_feature_indexes():
+  with engine.begin() as conn:
+    conn.execute(text('DROP INDEX IF EXISTS ix_features_geom'))
+    conn.execute(text('DROP INDEX IF EXISTS ix_features_dataset_id'))
+
+
+def create_feature_indexes():
+  with engine.begin() as conn:
+    conn.execute(text("SET LOCAL maintenance_work_mem = '256MB'"))
+    conn.execute(text('CREATE INDEX IF NOT EXISTS ix_features_dataset_id ON features (dataset_id)'))
+    conn.execute(text('CREATE INDEX IF NOT EXISTS ix_features_geom ON features USING GIST (geom)'))
+    conn.execute(text('ANALYZE features'))
 
 # 查询数据
 def get_feature(id: int):

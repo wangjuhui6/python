@@ -65,12 +65,14 @@ def import_data(data: dict):
 
   try:
     if data_type == 'pbf':
-      handler = PBFImporter(file_path=file_path, datasets_id=datasets_id) 
+      features_server_methods.drop_feature_indexes()
+      handler = PBFImporter(file_path=file_path, datasets_id=datasets_id)
       handler.apply_file(
         handler.file_path,
-        locations=True
+        locations=True,
+        idx='flex_mem',
       )
-      handler.flush()      # 写入最后不足5000条的数据
+      handler.flush()
     return ResponseModel(
       code=200,
       msg="导入数据成功",
@@ -82,6 +84,12 @@ def import_data(data: dict):
       msg=f"导入数据失败: {e}",
       data=False
     )
+  finally:
+    if data_type == 'pbf':
+      try:
+        features_server_methods.create_feature_indexes()
+      except Exception as idx_err:
+        print(f'重建要素索引失败: {idx_err}')
 
 # 根据数据源id查询数据
 @router.get("/features/list")
