@@ -16,3 +16,4 @@ app/api/routers/__pycache__/
 app/postgis/base/__pycache__/
 app/postgis/server/__pycache__/
 model-data/
+app/llm/__pycache__/
