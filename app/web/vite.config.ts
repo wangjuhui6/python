@@ -34,6 +34,7 @@ export default defineConfig({
     }
   },
   build: {
-    outDir: '../html'
+    outDir: '../html',
+    emptyOutDir: true,
   }
 })

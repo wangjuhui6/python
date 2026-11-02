@@ -61,24 +61,24 @@ export const routes: any[] = [
       }
     ]
   },
-  {
-    path: '/postgis',
-    name: 'postgis',
-    redirect: '/postgis/list',
-    meta: {
-      title: '数据管理'
-    },
-    children: [
-      {
-        path: '/postgis/list',
-        name: 'postgis-list',
-        meta: {
-          title: '数据源'
-        },
-        component: () => import('../views/postgis/index.vue'),
-      },
-    ]
-  },
+  // {
+  //   path: '/postgis',
+  //   name: 'postgis',
+  //   redirect: '/postgis/list',
+  //   meta: {
+  //     title: '数据管理'
+  //   },
+  //   children: [
+  //     {
+  //       path: '/postgis/list',
+  //       name: 'postgis-list',
+  //       meta: {
+  //         title: '数据源'
+  //       },
+  //       component: () => import('../views/postgis/index.vue'),
+  //     },
+  //   ]
+  // },
   {
     path: '/system',
     name: 'system',
@@ -103,41 +103,83 @@ export const routes: any[] = [
         },
         component: () => import('../views/llm/transform.vue'),
       },
-      {
-        path: '/system/map-legend',
-        name: 'system-map-legend',
-        meta: {
-          title: '地图图例识别'
-        },
-        component: () => import('../views/llm/mapLegend.vue'),
-      },
+      // {
+      //   path: '/system/map-legend',
+      //   name: 'system-map-legend',
+      //   meta: {
+      //     title: '地图图例识别'
+      //   },
+      //   component: () => import('../views/llm/mapLegend.vue'),
+      // },
+      // {
+      //   path: '/system/train-legend',
+      //   name: 'system-train-legend',
+      //   meta: {
+      //     title: '图例训练样本'
+      //   },
+      //   component: () => import('../views/llm/trainLegend.vue'),
+      // },
+      // {
+      //   path: '/system/synth-legend',
+      //   name: 'system-synth-legend',
+      //   meta: {
+      //     title: '合成训练图'
+      //   },
+      //   component: () => import('../views/llm/synthLegend.vue'),
+      // },
     ]
   },
   {
-    path: '/style',
-    name: 'style',
-    redirect: '/style/editor',
+    path: '/route',
+    name: 'route',
+    redirect: '/route/plan',
     meta: {
-      title: '样式编辑',
-      fullPage: true
+      title: '路线规划'
     },
     children: [
       {
-        path: '/style/editor',
-        name: 'style-editor-nav',
+        path: '/route/plan',
+        name: 'route-plan',
         meta: {
-          title: '样式编辑器'
-        }
+          title: '路线规划'
+        },
+        component: () => import('../views/route/index.vue')
       },
       {
-        path: '/style/sprite',
-        name: 'style-sprite-nav',
+        path: '/route/describe',
+        name: 'route-describe',
         meta: {
-          title: '图标精灵图'
-        }
+          title: '描述生成'
+        },
+        component: () => import('../views/route/describe.vue')
       }
     ]
-  }
+  },
+  // {
+  //   path: '/style',
+  //   name: 'style',
+  //   redirect: '/style/editor',
+  //   meta: {
+  //     title: '样式编辑',
+  //     fullPage: true
+  //   },
+  //   children: [
+  //     {
+  //       path: '/style/editor',
+  //       name: 'style-editor-nav',
+  //       meta: {
+  //         title: '样式编辑器'
+  //       }
+  //     },
+  //     {
+  //       path: '/style/sprite',
+  //       name: 'style-sprite-nav',
+  //       meta: {
+  //         title: '图标精灵图'
+  //       }
+  //     }
+  //   ]
+  // }
 ]
 
 const router = createRouter({
@@ -161,6 +203,10 @@ const router = createRouter({
       path: '/style/sprite',
       name: 'style-sprite',
       component: () => import('../views/style/sprite.vue')
+    },
+    {
+      path: '/system/georef',
+      redirect: '/system/map-legend',
     },
     {
       path: '/postgis/features/map/:id',

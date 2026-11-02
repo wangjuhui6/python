@@ -95,7 +95,7 @@ export function extractZoomStops(value: unknown): { from: number; to: number } |
     if (!Number.isNaN(z)) stops.push(z)
   }
   if (stops.length < 2) return null
-  return { from: stops[0], to: stops[stops.length - 1] }
+  return { from: stops[0] || 0, to: stops[stops.length - 1] || 0 }
 }
 
 export function extractGetName(value: unknown): string {

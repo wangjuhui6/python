@@ -13,7 +13,7 @@ export interface useMapReturn {
   getMapBounds: () => any
 }
 
-const emptyCollection = {
+const emptyCollection: GeoJSON.FeatureCollection = {
   type: 'FeatureCollection',
   features: [],
 }

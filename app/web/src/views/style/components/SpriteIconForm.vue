@@ -7,16 +7,16 @@
         </div>
       </el-form-item>
       <el-form-item label="名称（style 里 icon-image）">
-        <el-input :model-value="icon.name" @change="(v: string) => store.updateIcon(icon.uid, { name: v })" />
+        <el-input :model-value="icon.name" @change="onName" />
       </el-form-item>
       <el-form-item label="pixelRatio">
-        <el-radio-group :model-value="icon.pixelRatio" @change="(v: number) => store.updateIcon(icon.uid, { pixelRatio: Number(v) })">
+        <el-radio-group :model-value="icon.pixelRatio" @change="onPixelRatio">
           <el-radio-button :value="1">1x</el-radio-button>
           <el-radio-button :value="2">2x</el-radio-button>
         </el-radio-group>
       </el-form-item>
       <el-form-item label="SDF">
-        <el-switch :model-value="icon.sdf" @change="(v: boolean) => store.updateIcon(icon.uid, { sdf: v })" />
+        <el-switch :model-value="icon.sdf" @change="onSdf" />
       </el-form-item>
       <el-form-item label="尺寸">
         <span class="muted">{{ icon.width }} × {{ icon.height }}</span>
@@ -49,6 +49,24 @@ import SpriteThumb from './SpriteThumb.vue'
 const store = useSpriteEditorStore()
 const icon = computed(() => store.selected)
 const fileInput = ref<HTMLInputElement | null>(null)
+
+function onName(v: string) {
+  const cur = icon.value
+  if (!cur) return
+  store.updateIcon(cur.uid, { name: v })
+}
+
+function onPixelRatio(v: string | number | boolean) {
+  const cur = icon.value
+  if (!cur) return
+  store.updateIcon(cur.uid, { pixelRatio: Number(v) })
+}
+
+function onSdf(v: string | number | boolean) {
+  const cur = icon.value
+  if (!cur) return
+  store.updateIcon(cur.uid, { sdf: v === true || v === 'true' })
+}
 
 function jsonText(v: unknown) {
   return v == null ? '' : JSON.stringify(v)

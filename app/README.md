@@ -51,9 +51,23 @@ coll = COLLECT(
 
 ### docker PostgreSQL 数据库 PostgreSQL + PostGIS
 
-启动 docker compose up -d
-    若有问题提示 compose 不存在之类
-    执行 docker-compose up -d
+单机启动不会再从网上拉取镜像。本机已经有 `postgis/postgis:16-3.5` 就直接用；没有的话，从离线包导入。
+
+有网络的机器上导出一次，把 tar 拷到单机：
+
+```
+docker pull postgis/postgis:16-3.5
+docker save -o postgis-16-3.5.tar postgis/postgis:16-3.5
+```
+
+离线包放在下面任一位置（打包后放 exe 旁边）：
+
+```
+app/vendor/postgis/postgis-16-3.5.tar
+```
+
+单机需要已安装并启动 Docker Desktop。数据在 `postgis-data`，换机器时连这个目录一起拷。
+
 进入容器 docker exec -it postgis bash
 进入数据库 psql -U gis -d gisdb
 检查 SELECT PostGIS_Version();

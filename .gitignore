@@ -18,3 +18,10 @@ app/postgis/server/__pycache__/
 model-data/
 app/llm/__pycache__/
 app/data/map-legend/
+app/data/route-cache/
+app/data/route-work/
+app/vendor/graphhopper/
+app/vendor/postgis/*.tar
+app/data/georef/
+app/data/train-legend/
+app/route_engine/__pycache__/

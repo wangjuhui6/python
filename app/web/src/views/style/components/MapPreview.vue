@@ -42,7 +42,7 @@ onMounted(() => {
     const picked = features
       .filter((f) => f.layer?.id && styleLayerIds.has(f.layer.id))
       .map((f) => ({
-        layerId: f.layer.id,
+        layerId: f.layer!.id,
         source: (f.layer as any).source,
         sourceLayer: f.sourceLayer,
         properties: { ...(f.properties || {}) },
@@ -86,7 +86,11 @@ watch(
     if (!map) return
     applying = true
     try {
-      map.setStyle(cloneStyle(store.style) as any, { diff: true })
+      map.setStyle(cloneStyle(store.style) as any, {
+        diff: true,
+        localFontFamily: undefined,
+        localIdeographFontFamily: undefined,
+      })
     } catch {
       map.setStyle(cloneStyle(store.style) as any)
     }

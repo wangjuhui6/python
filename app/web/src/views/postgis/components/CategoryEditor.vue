@@ -69,7 +69,7 @@
             :value="String(val)"
           />
         </el-select>
-        <el-icon class="category-editor-remove" @click="removeCondition(row, cIndex)"><Delete /></el-icon>
+        <el-icon class="category-editor-remove" @click="removeCondition(row, Number(cIndex))"><Delete /></el-icon>
       </div>
       <el-button size="small" :icon="Plus" text type="primary" @click="addCondition(row)">添加条件</el-button>
       <el-button size="small" type="danger" text @click="removeRow(index)">删除分类</el-button>

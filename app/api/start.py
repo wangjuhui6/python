@@ -1,7 +1,7 @@
 from fastapi import FastAPI
 from fastapi import APIRouter
 from fastapi.staticfiles import StaticFiles
-from .routers import base, data, gdal, tkinter, record, postgis, style, llm
+from .routers import base, data, gdal, tkinter, record, postgis, style, llm, route
 from base import get_request_path
 
 api = FastAPI()
@@ -17,6 +17,7 @@ api_router.include_router(record.router)
 api_router.include_router(postgis.router)
 api_router.include_router(style.router)
 api_router.include_router(llm.router)
+api_router.include_router(route.router)
 
 api.include_router(api_router)
 

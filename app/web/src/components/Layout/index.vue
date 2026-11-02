@@ -92,7 +92,8 @@ function go(item: any) {
     top: 64px;
     width: 100%;
     z-index: 9;
-    height: 80px;
+    min-height: 80px;
+    height: auto;
     box-sizing: border-box;
   }
   &-content{
@@ -135,7 +136,11 @@ function go(item: any) {
   display: flex;
   justify-content: center;
   align-items: center;
+  flex-wrap: wrap;
+  row-gap: 8px;
   &-item{
+    flex: 0 0 auto;
+    white-space: nowrap;
     padding: 0 16px;
     background-color: #fff;
     border-radius: 4px;

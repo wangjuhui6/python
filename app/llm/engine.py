@@ -5,7 +5,7 @@ from pathlib import Path
 
 from .config import CONFIG_PATH, load_config, save_config
 
-_lock = threading.Lock()
+_lock = threading.RLock()
 _llm = None
 _loaded_path = ""
 _loaded_mmproj = ""
@@ -87,14 +87,40 @@ def _llama_available() -> tuple[bool, str]:
     return True, "llama-cpp-python 已安装"
   except ImportError:
     return False, "未安装 llama-cpp-python，请执行 pip install llama-cpp-python"
+  except Exception as exc:
+    # 打包后动态库缺失时这里是 FileNotFoundError / RuntimeError，不能再往外抛成 500。
+    return False, f"本地模型运行库无法加载：{exc}"
+
+
+def _drop_model(reason: str = "") -> None:
+  global _llm, _loaded_path, _loaded_mmproj, _last_error
+  _llm = None
+  _loaded_path = ""
+  _loaded_mmproj = ""
+  if reason:
+    _last_error = reason
 
 
 def unload() -> None:
-  global _llm, _loaded_path, _loaded_mmproj
   with _lock:
-    _llm = None
-    _loaded_path = ""
-    _loaded_mmproj = ""
+    _drop_model()
+
+
+def _is_native_crash(exc: BaseException) -> bool:
+  text = str(exc).lower()
+  return "access violation" in text or "segmentation" in text or "0x00000000" in text
+
+
+def _messages_have_image(messages: list[dict]) -> bool:
+  for msg in messages or []:
+    content = msg.get("content")
+    if isinstance(content, list):
+      for part in content:
+        if isinstance(part, dict) and (
+          part.get("type") in {"image_url", "image"} or "image_url" in part
+        ):
+          return True
+  return False
 
 
 def load(model_path: str | None = None, mmproj_path: str | None = None, persist: bool = True) -> dict:
@@ -166,27 +192,43 @@ def load(model_path: str | None = None, mmproj_path: str | None = None, persist:
 
 def chat(messages: list[dict], temperature: float = 0.2, json_mode: bool = False, max_tokens: int | None = None) -> str:
   global _last_error
-  if _llm is None:
-    load()
   cfg = load_config()
   kwargs = {
     "messages": messages,
     "temperature": temperature,
     "max_tokens": int(max_tokens or cfg.get("max_tokens") or 512),
+    "seed": 0,
   }
-  if json_mode:
+  # 视觉请求不要开 json_object：失败后立刻二次推理会把 clip 上下文打成空指针
+  if json_mode and not _messages_have_image(messages):
     kwargs["response_format"] = {"type": "json_object"}
   with _lock:
+    if _llm is None:
+      load()
     if _llm is None:
       raise RuntimeError("模型未加载")
     try:
       resp = _llm.create_chat_completion(**kwargs)
-    except Exception:
-      if json_mode:
+    except TypeError:
+      kwargs.pop("seed", None)
+      resp = _llm.create_chat_completion(**kwargs)
+    except Exception as exc:
+      if _is_native_crash(exc):
+        _drop_model("视觉模型上下文已损坏，请重新加载")
+        raise RuntimeError("视觉模型崩溃（空指针），请到大模型页重新加载后再识别。") from exc
+      if "response_format" in kwargs:
         kwargs.pop("response_format", None)
-        resp = _llm.create_chat_completion(**kwargs)
+        try:
+          resp = _llm.create_chat_completion(**kwargs)
+        except Exception as retry_exc:
+          if _is_native_crash(retry_exc):
+            _drop_model("视觉模型上下文已损坏，请重新加载")
+            raise RuntimeError("视觉模型崩溃（空指针），请到大模型页重新加载后再识别。") from retry_exc
+          _last_error = str(retry_exc)
+          raise RuntimeError(f"模型推理失败：{retry_exc}") from retry_exc
       else:
-        raise
+        _last_error = str(exc)
+        raise RuntimeError(f"模型推理失败：{exc}") from exc
   try:
     return resp["choices"][0]["message"]["content"]
   except (KeyError, IndexError, TypeError) as exc:
