@@ -1,6 +1,7 @@
 <template>
   <div class="vector">
     <GeojsonToShp />
+    <ExportBuildings />
     <ShpToGlb />
     <Crop3dTiles />
     <LineDeduplicator />
@@ -14,6 +15,7 @@ import Crop3dTiles from './commponents/vector/crop3dTiles.vue'
 import LineDeduplicator from './commponents/vector/lineDeduplicator.vue'
 import GeojsonToShp from './commponents/vector/geojsonToShp.vue'
 import GeojsonMerge from './commponents/vector/geojsonMerge.vue'
+import ExportBuildings from './commponents/vector/exportBuildings.vue'
 </script>
 
 <style scoped lang="less">

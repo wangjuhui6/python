@@ -9,6 +9,7 @@ export interface RouteStatus {
   phase: 'stopped' | 'starting' | 'ready' | 'failed'
   message: string
   pbf: string
+  elevation: boolean
   port: number
   profiles: RouteProfile[]
   log: string[]
@@ -56,8 +57,8 @@ export function getRouteStatus(): Promise<RouteStatus> {
   return service({ url: '/route/status', method: 'get' })
 }
 
-export function startRoute(pbf_path: string): Promise<RouteStatus> {
-  return service({ url: '/route/start', method: 'post', data: { pbf_path } })
+export function startRoute(pbf_path: string, elevation = false): Promise<RouteStatus> {
+  return service({ url: '/route/start', method: 'post', data: { pbf_path, elevation } })
 }
 
 export function stopRoute(): Promise<RouteStatus> {

@@ -26,6 +26,22 @@ export const routes: any[] = [
         component: () => import('../views/data/vector.vue')
       },
       {
+        path: '/data/mbtiles',
+        name: 'mbtiles',
+        meta: {
+          title: 'PBF转MBTiles'
+        },
+        component: () => import('../views/data/mbtiles.vue')
+      },
+      {
+        path: '/data/basemap',
+        name: 'basemap',
+        meta: {
+          title: '底图服务'
+        },
+        component: () => import('../views/data/basemap.vue')
+      },
+      {
         path: '/data/raster',
         name: 'raster',
         meta: {

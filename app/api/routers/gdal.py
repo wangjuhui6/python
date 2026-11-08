@@ -9,6 +9,7 @@ from utils.shpToGlb import ShpToGlb
 from utils.clip3dTiles import Clip3dTiles
 from utils.clip3dTilesNew import Clip3dTilesNew
 from utils.lineDeduplication import LineDeduplicator
+from utils.exportBuildings import export_buildings, field_values, inspect_buildings
 
 # todo geojson转shp成功了
 # 后续看看还有哪些功能 将这些都集成一下
@@ -78,13 +79,16 @@ env["PROJ_LIB"] = os.path.join(
     "proj"
 )
 
-# 执行 OGR2OGR 命令
-result = subprocess.run(
+# 本机没有 GDAL 时也不要挡住其他接口
+try:
+  subprocess.run(
     [OGR2OGR, "--version"],
     env=env,
     capture_output=True,
     text=True
-)
+  )
+except OSError:
+  pass
 
 router = APIRouter(prefix="/gdal", tags=["GDAL"])
 
@@ -186,54 +190,6 @@ def shpToGeojson(params: GeojsonToShpParams):
     data=True
   )
 
-# osm pbf转mbtiles
-@router.post("/osmPbfToMbtiles")
-def osmPbfToMbtiles(params: GeojsonToShpParams):
-  inputFile = params.inputFile
-  outputPath = params.outputPath
-  pathName = os.path.basename(outputPath).split(".")[0]
-  print(pathName, '我是pathName', outputPath, '我是inputFile')
-  # outputPath = params.outputPath
-
-  # cmd = [
-  #   OGR2OGR,
-  #   "-f",
-  #   "MBTiles",
-  #   outputPath,
-  #   inputFile,
-  #   "-nln",
-  #   layerName,
-  #   "-lco",
-  #   "ENCODING=UTF-8"
-  # ]
-
-  # def run_command():
-  #   process = subprocess.Popen(
-  #     cmd,
-  #     env=env,
-  #     stdout=subprocess.PIPE,
-  #     stderr=subprocess.PIPE,
-  #     text=True
-  #   )
-  #   record = add_record(inputFile, outputPath, 0)
-
-  #   for line in process.stdout:
-  #     print(line.strip())
-
-  #   return_code = process.wait()
-  #   if return_code == 0:
-  #     update_record(record.id, 1)
-  #   else:
-  #     update_record(record.id, 2)
-  
-  # run_command()
-
-  # return ResponseModel(
-  #   code=200,
-  #   msg="任务添加成功",
-  #   data=True
-  # )
-
 # shp 获取字段
 @router.post("/getShpFields")
 def getShpFields(data: dict):
@@ -245,6 +201,40 @@ def getShpFields(data: dict):
     msg="获取字段成功",
     data=fields
   )
+
+def _building_call(fn):
+  try:
+    return ResponseModel(code=200, msg="成功", data=fn())
+  except Exception as exc:
+    return ResponseModel(code=500, msg=str(exc), data=False)
+
+
+# 识别 shp 里的建筑面
+@router.post("/inspectBuildingShp")
+def inspectBuildingShp(data: dict):
+  return _building_call(lambda: inspect_buildings(data.get("file") or ""))
+
+
+# 某个字段的取值，供勾选建筑
+@router.post("/buildingFieldValues")
+def buildingFieldValues(data: dict):
+  return _building_call(lambda: field_values(data.get("file") or "", data.get("field") or ""))
+
+
+# 把建筑面单独导出成 shp
+@router.post("/exportBuildingShp")
+def exportBuildingShp(data: dict):
+  result = _building_call(lambda: export_buildings(
+    data.get("file") or "",
+    data.get("outputPath") or "",
+    data.get("field") or "",
+    data.get("values") or [],
+  ))
+  if result.code == 200:
+    count = result.data.get("count", 0)
+    result.msg = f"已导出 {count} 条建筑"
+  return result
+
 
 # shp 生成白膜
 @router.post("/generateGlb")

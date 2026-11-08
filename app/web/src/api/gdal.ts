@@ -10,7 +10,7 @@ export async function geojsonToShp(data: any): Promise<string> {
 }
 
 // osm pbf转mbtiles
-export async function osmPbfToMbtiles(data: any): Promise<string> {
+export async function osmPbfToMbtiles(data: any): Promise<any> {
   return await service({
     url: '/gdal/osmPbfToMbtiles',
     method: 'post',
@@ -18,10 +18,58 @@ export async function osmPbfToMbtiles(data: any): Promise<string> {
   })
 }
 
+export async function osmPbfToMbtilesEnv(): Promise<any> {
+  return await service({
+    url: '/gdal/osmPbfToMbtiles/env',
+    method: 'get'
+  })
+}
+
+export async function osmPbfToMbtilesStatus(): Promise<any> {
+  return await service({
+    url: '/gdal/osmPbfToMbtiles/status',
+    method: 'get'
+  })
+}
+
+export async function osmPbfToMbtilesStop(): Promise<any> {
+  return await service({
+    url: '/gdal/osmPbfToMbtiles/stop',
+    method: 'post'
+  })
+}
+
 // shp 获取字段
 export async function getShpFields(data: any): Promise<string> {
   return await service({
     url: '/gdal/getShpFields',
+    method: 'post',
+    data
+  })
+}
+
+// 识别 shp 里的建筑
+export async function inspectBuildingShp(data: any): Promise<any> {
+  return await service({
+    url: '/gdal/inspectBuildingShp',
+    method: 'post',
+    data
+  })
+}
+
+// 字段取值
+export async function buildingFieldValues(data: any): Promise<any> {
+  return await service({
+    url: '/gdal/buildingFieldValues',
+    method: 'post',
+    data
+  })
+}
+
+// 导出建筑 shp
+export async function exportBuildingShp(data: any): Promise<any> {
+  return await service({
+    url: '/gdal/exportBuildingShp',
     method: 'post',
     data
   })

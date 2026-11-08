@@ -1,6 +1,7 @@
 import json
 import hashlib
 import os
+import shutil
 import subprocess
 import threading
 import time
@@ -17,6 +18,7 @@ PROFILES = ("car", "foot", "bike")
 DEFAULT_BASEMAP = "https://tile.openstreetmap.org/{z}/{x}/{y}.png"
 _listen_port = PORT
 _admin_port = ADMIN_PORT
+_index_started_for = ""
 
 def _vendor():
   # 开发时在项目里；打包后也可以把同一份目录放在 exe 旁边。
@@ -35,6 +37,7 @@ _state = {
   "message": "尚未启动",
   "pbf": "",
   "port": PORT,
+  "elevation": False,
 }
 
 
@@ -88,7 +91,10 @@ def _remember(line):
     _lines.append(text)
     lowered = text.lower()
     if _state["phase"] == "starting" and ("creating graph" in lowered or "importing" in lowered):
-      _state["message"] = "正在建立路网，第一次使用该文件会比较久"
+      if _state.get("elevation"):
+        _state["message"] = "正在建立带高程的路网，第一次需要联网，会比较久"
+      else:
+        _state["message"] = "正在用本地路网建立路线，不需要联网，第一次会比较久"
 
 
 def _read_logs(proc):
@@ -121,20 +127,23 @@ def _cache_ready(path):
   return all(os.path.isfile(os.path.join(path, name)) for name in needed)
 
 
-def _cache_dir(pbf):
-  try:
-    meta_path = os.path.join(_vendor(), "graph-cache.json")
-    bundled_cache = os.path.join(_vendor(), "graph-cache")
-    with open(meta_path, "r", encoding="utf-8") as f:
-      meta = json.load(f)
-    same_name = os.path.basename(pbf) == meta.get("file_name")
-    same_size = os.path.getsize(pbf) == int(meta.get("size") or -1)
-    if same_name and same_size and _cache_ready(bundled_cache):
-      return bundled_cache
-  except (OSError, ValueError, json.JSONDecodeError):
-    pass
+def _cache_dir(pbf, elevation):
+  # 配套缓存是带高程建出来的，只有开启高程且文件名、大小一致时才能直接用。
+  if elevation:
+    try:
+      meta_path = os.path.join(_vendor(), "graph-cache.json")
+      bundled_cache = os.path.join(_vendor(), "graph-cache")
+      with open(meta_path, "r", encoding="utf-8") as f:
+        meta = json.load(f)
+      same_name = os.path.basename(pbf) == meta.get("file_name")
+      same_size = os.path.getsize(pbf) == int(meta.get("size") or -1)
+      if same_name and same_size and _cache_ready(bundled_cache):
+        return bundled_cache
+    except (OSError, ValueError, json.JSONDecodeError):
+      pass
   digest = hashlib.sha1(os.path.normcase(os.path.abspath(pbf)).encode("utf-8")).hexdigest()[:16]
-  path = os.path.join(get_writable_dir(), "data", "route-cache", digest)
+  folder = digest + "-ele" if elevation else digest
+  path = os.path.join(get_writable_dir(), "data", "route-cache", folder)
   os.makedirs(path, exist_ok=True)
   return path
 
@@ -199,7 +208,7 @@ def _ensure_files():
 
 
 def _write_state(pid, pbf):
-  payload = {"pid": pid, "pbf": pbf, "port": _listen_port}
+  payload = {"pid": pid, "pbf": pbf, "port": _listen_port, "elevation": bool(_state.get("elevation"))}
   with open(_state_path(), "w", encoding="utf-8") as f:
     json.dump(payload, f, ensure_ascii=False)
 
@@ -211,9 +220,38 @@ def _clear_state():
     pass
 
 
+def _index_key(pbf):
+  try:
+    stat = os.stat(pbf)
+  except OSError:
+    return ""
+  return f"{os.path.normcase(os.path.abspath(pbf))}|{stat.st_size}|{stat.st_mtime_ns}"
+
+
+def _warm_index(pbf, key):
+  global _index_started_for
+  try:
+    from route_engine.road_index import ensure_index
+    ensure_index(pbf)
+  except Exception:
+    with _lock:
+      if _index_started_for == key:
+        _index_started_for = ""
+
+
+def _schedule_index(pbf):
+  global _index_started_for
+  key = _index_key(pbf) if pbf else ""
+  if not key or _index_started_for == key:
+    return
+  _index_started_for = key
+  threading.Thread(target=_warm_index, args=(pbf, key), daemon=True).start()
+
+
 def _adopt():
   global _pid, _listen_port, _admin_port
   if _pid and _pid_alive(_pid):
+    _schedule_index(_state.get("pbf") or "")
     return
   path = _state_path()
   if not os.path.isfile(path):
@@ -234,6 +272,8 @@ def _adopt():
   _state["pbf"] = saved.get("pbf") or ""
   _state["message"] = "路线服务已就绪"
   _state["port"] = port
+  _state["elevation"] = bool(saved.get("elevation"))
+  _schedule_index(_state.get("pbf") or "")
 
 
 def _watch(proc, pbf, port, log_path, log_offset):
@@ -246,6 +286,7 @@ def _watch(proc, pbf, port, log_path, log_offset):
       break
     time.sleep(1)
   time.sleep(0.3)
+  warmed = ""
   with _lock:
     if _proc is not proc:
       return
@@ -254,9 +295,12 @@ def _watch(proc, pbf, port, log_path, log_offset):
       _state["message"] = "路线服务已就绪"
       _state["pbf"] = pbf
       _state["port"] = port
-      return
-    _state["phase"] = "failed"
-    _state["message"] = _failure_text(proc.returncode, log_path, log_offset)
+      warmed = pbf
+    else:
+      _state["phase"] = "failed"
+      _state["message"] = _failure_text(proc.returncode, log_path, log_offset)
+  if warmed:
+    _schedule_index(warmed)
 
 
 def _stop_locked():
@@ -288,11 +332,46 @@ def _has_setting(text, key):
   return False
 
 
-def _runtime_config(work, app_port, admin_port, read_only):
+def _disable_elevation(text):
+  # 高程瓦片要联网下载。没有现成缓存时去掉高程，只靠本地路网文件建图。
+  text = text.replace(
+    "custom_model_files: [foot.json, foot_elevation.json]",
+    "custom_model_files: [foot.json]",
+  )
+  text = text.replace(
+    "custom_model_files: [bike.json, bike_elevation.json]",
+    "custom_model_files: [bike.json]",
+  )
+  text = text.replace("hike_rating, average_slope,", "hike_rating,")
+  lines = []
+  for line in text.splitlines(keepends=True):
+    if line.strip() == "graph.elevation.provider: srtm":
+      line = line.replace("graph.elevation.provider: srtm", "# graph.elevation.provider: srtm", 1)
+    lines.append(line)
+  return "".join(lines)
+
+
+def _reset_incomplete_cache(cache):
+  if _cache_ready(cache):
+    return
+  for name in os.listdir(cache):
+    path = os.path.join(cache, name)
+    if os.path.isdir(path):
+      shutil.rmtree(path, ignore_errors=True)
+    else:
+      try:
+        os.remove(path)
+      except OSError:
+        pass
+
+
+def _runtime_config(work, app_port, admin_port, read_only, elevation):
   with open(os.path.join(_vendor(), "config-example.yml"), "r", encoding="utf-8") as f:
     text = f.read()
   text = text.replace("port: 8989", f"port: {app_port}\n    bind_host: 127.0.0.1", 1)
   text = text.replace("port: 8990", f"port: {admin_port}\n    bind_host: 127.0.0.1", 1)
+  if not elevation:
+    text = _disable_elevation(text)
   if not _has_setting(text, "graph.locktype:"):
     text = text.replace(
       "graph.dataaccess.default_type: RAM\n",
@@ -402,26 +481,29 @@ def _failure_text(code, log_path, log_offset):
     return "路线服务启动失败：端口被占用，请重试"
   if "read lock" in lowered or "write lock" in lowered or "access is denied" in lowered:
     return "路线服务启动失败：路网缓存无法读写。请把程序放到当前用户可写的目录，并带上完整的 graph-cache"
-  if "unknownhost" in lowered or "connect timed out" in lowered or "elevation" in lowered and "download" in lowered:
-    return "路线服务启动失败：第一次建立这份路网需要联网。文件名和大小与配套缓存一致时可直接启动"
+  if "unknownhost" in lowered or "connect timed out" in lowered or ("elevation" in lowered and "download" in lowered):
+    return "路线服务启动失败：高程数据下载失败。请联网后重试，或关闭高程后再启动"
   if detail:
     return f"路线服务启动失败（退出码 {code}）：{detail}"
   return f"路线服务启动失败（退出码 {code}）"
 
 
-def _spawn_locked(pbf):
+def _spawn_locked(pbf, elevation):
   global _proc, _pid, _listen_port, _admin_port
   _ensure_files()
   _check_java()
   work = _work_dir()
-  cache = _cache_dir(pbf)
+  elevation = bool(elevation)
+  cache = _cache_dir(pbf, elevation)
   srtm = os.path.join(work, "srtm")
   heap = _heap_for(pbf)
   app_port, admin_port = _pick_ports()
   _listen_port = app_port
   _admin_port = admin_port
-  read_only = _using_bundled_cache(cache)
-  config = _runtime_config(work, app_port, admin_port, read_only)
+  read_only = elevation and _using_bundled_cache(cache)
+  if not read_only:
+    _reset_incomplete_cache(cache)
+  config = _runtime_config(work, app_port, admin_port, read_only, elevation)
   java = os.path.join(_vendor(), "jdk", "bin", "java.exe")
   cmd = [
     java,
@@ -443,7 +525,13 @@ def _spawn_locked(pbf):
   _state["phase"] = "starting"
   _state["pbf"] = pbf
   _state["port"] = app_port
-  _state["message"] = "正在启动路线服务"
+  _state["elevation"] = elevation
+  if read_only:
+    _state["message"] = "正在启动路线服务"
+  elif elevation:
+    _state["message"] = "正在建立带高程的路网，第一次需要联网，会比较久"
+  else:
+    _state["message"] = "正在用本地路网建立路线，不需要联网，第一次会比较久"
   try:
     proc = subprocess.Popen(
       cmd,
@@ -474,6 +562,7 @@ def _snapshot():
     "phase": _state["phase"],
     "message": _state["message"],
     "pbf": _state["pbf"],
+    "elevation": bool(_state.get("elevation")),
     "port": _listen_port,
     "profiles": [
       {"id": "car", "label": "驾车"},
@@ -482,6 +571,12 @@ def _snapshot():
     ],
     "log": list(_lines)[-12:],
   }
+
+
+def current_pbf():
+  with _lock:
+    _adopt()
+    return _state.get("pbf") or ""
 
 
 def status():
@@ -504,8 +599,9 @@ def defaults():
   }
 
 
-def start(pbf_path: str):
+def start(pbf_path: str, elevation: bool = False):
   pbf = os.path.abspath((pbf_path or "").strip().strip('"'))
+  elevation = bool(elevation)
   if not pbf or not os.path.isfile(pbf):
     raise ValueError("找不到路网文件")
   if not pbf.lower().endswith((".pbf", ".osm")):
@@ -514,10 +610,11 @@ def start(pbf_path: str):
   with _lock:
     _adopt()
     alive = _pid_alive(_pid)
-    if alive and _same_pbf(pbf) and _state["phase"] in ("ready", "starting"):
+    same = alive and _same_pbf(pbf) and bool(_state.get("elevation")) == elevation
+    if same and _state["phase"] in ("ready", "starting"):
       return _snapshot()
     _stop_locked()
-    _spawn_locked(pbf)
+    _spawn_locked(pbf, elevation)
     return _snapshot()
 
 

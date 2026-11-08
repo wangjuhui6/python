@@ -25,6 +25,7 @@ export const dataTypes = {
   gdb: [['GDB', '*.gdb']],
   dbf: [['DBF', '*.dbf']],
   shp: [['SHP', '*.shp']],
+  shpOrPbf: [['SHP 或 PBF', '*.shp;*.pbf'], ['SHP', '*.shp'], ['OSM PBF', '*.pbf']],
   shx: [['SHX', '*.shx']],
   prj: [['PRJ', '*.prj']],
   geotiff: [['GeoTIFF', '*.tif']],

@@ -10,6 +10,7 @@ router = APIRouter(prefix="/route", tags=["路线规划"])
 
 class StartBody(BaseModel):
   pbf_path: str
+  elevation: bool = False
 
 
 class PlanBody(BaseModel):
@@ -37,7 +38,7 @@ def route_status():
 @router.post("/start")
 def route_start(body: StartBody):
   try:
-    data = start(body.pbf_path)
+    data = start(body.pbf_path, body.elevation)
   except ValueError as exc:
     return ResponseModel(code=201, msg=str(exc))
   return ResponseModel(data=data)

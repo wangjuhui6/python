@@ -37,6 +37,52 @@ python start.py
 
 pyinstaller start.spec
 
+打包产物是 `Map Tool.exe`。`app/tools/gdal` 会打进 exe。`planetiler.jar` 和绿色版 Java 不打进 exe。
+
+### PBF 转 MBTiles 的文件放哪里
+
+程序只从下面这个目录读取，不使用系统里安装的 Java。
+
+开发时：
+
+```
+app/tools/planetiler/planetiler.jar
+app/tools/planetiler/jdk/bin/java.exe
+```
+
+打包后，放在 `Map Tool.exe` 旁边：
+
+```
+Map Tool.exe
+tools/planetiler/planetiler.jar
+tools/planetiler/jdk/bin/java.exe
+tools/planetiler/sources
+```
+
+`sources` 是第一次转换时下载的水系、海岸线缓存，也写在这个目录。换电脑时把 exe 和旁边的 `tools/planetiler` 一起拷走。
+
+### 底图服务的文件放哪里
+
+mbtiles 和 style.json 不打进 exe。程序从下面的目录读取，选择别的路径时记在同目录的 `service.json`。
+
+开发时：
+
+```
+app/tools/basemap/style.json
+app/tools/basemap/data.mbtiles
+```
+
+打包后，放在 `Map Tool.exe` 旁边：
+
+```
+Map Tool.exe
+tools/basemap/style.json
+tools/basemap/data.mbtiles
+tools/basemap/service.json
+```
+
+样式里用到的 sprite、字体放在 `style.json` 旁边。启动后样式地址是 `http://127.0.0.1:21006/basemap/style.json`。
+
 ### 调试
 
 coll = COLLECT(

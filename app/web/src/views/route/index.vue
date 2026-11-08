@@ -17,6 +17,12 @@
             <el-button @click="pickFile">选择</el-button>
           </div>
         </el-form-item>
+        <el-form-item label="高程">
+          <el-button :type="elevation ? 'primary' : 'default'" :disabled="phase === 'starting'" @click="elevation = !elevation">
+            {{ elevation ? '已开启' : '已关闭' }}
+          </el-button>
+          <span class="elev-note">{{ elevation ? '第一次建图需要联网' : '只用本地路网' }}</span>
+        </el-form-item>
         <el-form-item label="出行方式">
           <el-radio-group v-model="profile">
             <el-radio-button v-for="item in profiles" :key="item.id" :value="item.id">
@@ -111,6 +117,7 @@ const profiles = ref<RouteProfile[]>([
   { id: 'bike', label: '骑行' },
 ])
 const phase = ref<'stopped' | 'starting' | 'ready' | 'failed'>('stopped')
+const elevation = ref(false)
 const statusText = ref('尚未启动')
 const logs = ref<string[]>([])
 const stops = ref<Stop[]>([])
@@ -313,11 +320,14 @@ function createMap() {
   })
 }
 
-function applyStatus(data: { phase: typeof phase.value; message: string; pbf: string; log?: string[] }) {
+function applyStatus(data: { phase: typeof phase.value; message: string; pbf: string; elevation?: boolean; log?: string[] }) {
   phase.value = data.phase
   statusText.value = data.message || '尚未启动'
   logs.value = data.log || []
   if (data.pbf && !pbfPath.value) pbfPath.value = data.pbf
+  if ((data.phase === 'ready' || data.phase === 'starting') && typeof data.elevation === 'boolean') {
+    elevation.value = data.elevation
+  }
 }
 
 async function refreshStatus() {
@@ -360,7 +370,7 @@ async function onStart() {
     return
   }
   try {
-    const data = await startRoute(pbfPath.value.trim())
+    const data = await startRoute(pbfPath.value.trim(), elevation.value)
     applyStatus(data)
     if (data.phase === 'starting') beginPoll()
     if (data.phase === 'ready') schedulePlan()
@@ -539,6 +549,11 @@ onBeforeUnmount(() => {
   :deep(.el-input) {
     flex: 1;
   }
+}
+.elev-note {
+  margin-left: 8px;
+  color: #888;
+  font-size: 12px;
 }
 .actions {
   display: flex;

@@ -2,7 +2,7 @@
   <div class="route-page">
     <aside class="panel">
       <div class="panel-title">描述生成</div>
-      <div class="hint">底图只负责显示。路网文件用来计算路线。在地图上右键设置起点和终点，再用文字说明想经过的地方。生成后可拖动橙色途径点调整路线。</div>
+      <div class="hint">底图只负责显示。填好起点、终点和途径名称后，模型会查询本地路网、道路和收费站等点位，并自己决定途径点坐标，不需要联网。也可以在地图上右键添加途径点。橙色途径点可以拖动或删除，随后会重新生成路线。</div>
       <el-form label-position="top">
         <el-form-item label="底图地址">
           <el-input
@@ -17,6 +17,12 @@
             <el-button @click="pickFile">选择</el-button>
           </div>
         </el-form-item>
+        <el-form-item label="高程">
+          <el-button :type="elevation ? 'primary' : 'default'" :disabled="phase === 'starting'" @click="elevation = !elevation">
+            {{ elevation ? '已开启' : '已关闭' }}
+          </el-button>
+          <span class="elev-note">{{ elevation ? '第一次建图需要联网' : '只用本地路网' }}</span>
+        </el-form-item>
         <el-form-item label="出行方式">
           <el-radio-group v-model="profile">
             <el-radio-button v-for="item in profiles" :key="item.id" :value="item.id">
@@ -24,12 +30,12 @@
             </el-radio-button>
           </el-radio-group>
         </el-form-item>
-        <el-form-item label="途径描述">
+        <el-form-item label="途径名称">
           <el-input
             v-model="description"
             type="textarea"
             :rows="5"
-            placeholder="例如：先到北京路步行街，再经过珠江新城，不要上高速"
+            placeholder="例如：广州大道、猎德收费站、珠江新城"
           />
         </el-form-item>
       </el-form>
@@ -49,13 +55,14 @@
       </div>
       <div class="stops">
         <div class="stops-head"><span>点位</span></div>
-        <div v-if="!orderedStops.length" class="empty">右键地图设置起点和终点</div>
+        <div v-if="!orderedStops.length" class="empty">右键地图设置起点、终点和途径点</div>
         <div v-for="(item, index) in orderedStops" :key="index" class="stop-row">
           <span class="badge" :class="item.role">{{ roleText(item.role) }}</span>
           <span class="coord">{{ item.name || `${item.lng.toFixed(5)}, ${item.lat.toFixed(5)}` }}</span>
+          <el-button v-if="item.role === 'via'" link type="danger" @click="removeVia(item)">删除</el-button>
         </div>
       </div>
-      <div v-if="missed.length" class="missed">没有找到：{{ missed.join('、') }}</div>
+      <div v-if="missed.length" class="missed">路网文件里没有找到：{{ missed.join('、') }}。已沿当前路线放好，可以拖动或删除，随后会重新生成路线。</div>
       <div class="steps">
         <div class="stops-head"><span>路线说明</span></div>
         <div v-if="!instructions.length" class="empty">生成后会显示在这里</div>
@@ -76,6 +83,7 @@
       <div v-if="menu.show" class="menu" :style="{ left: menu.x + 'px', top: menu.y + 'px' }" @mousedown.stop @click.stop @contextmenu.prevent>
         <button type="button" @click="choose('start')">设为起点</button>
         <button type="button" @click="choose('end')">设为终点</button>
+        <button type="button" @click="choose('via')">添加途径点</button>
       </div>
       <div v-if="showOsmNote" class="attrib">© OpenStreetMap</div>
     </div>
@@ -120,6 +128,7 @@ const profiles = ref<RouteProfile[]>([
   { id: 'bike', label: '骑行' },
 ])
 const phase = ref<'stopped' | 'starting' | 'ready' | 'failed'>('stopped')
+const elevation = ref(false)
 const statusText = ref('尚未启动')
 const logs = ref<string[]>([])
 const description = ref('')
@@ -300,7 +309,7 @@ function createMap() {
     menu.value = {
       show: true,
       x: Math.max(8, Math.min(event.point.x, width - 148)),
-      y: Math.max(8, Math.min(event.point.y, height - 88)),
+      y: Math.max(8, Math.min(event.point.y, height - 120)),
       lng: event.lngLat.lng,
       lat: event.lngLat.lat,
     }
@@ -310,12 +319,15 @@ function createMap() {
   })
 }
 
-function applyStatus(data: { phase: typeof phase.value; message: string; pbf: string; log?: string[]; profiles?: RouteProfile[] }) {
+function applyStatus(data: { phase: typeof phase.value; message: string; pbf: string; elevation?: boolean; log?: string[]; profiles?: RouteProfile[] }) {
   phase.value = data.phase
   statusText.value = data.message || '尚未启动'
   logs.value = data.log || []
   if (data.pbf && !pbfPath.value) pbfPath.value = data.pbf
   if (data.profiles?.length) profiles.value = data.profiles
+  if ((data.phase === 'ready' || data.phase === 'starting') && typeof data.elevation === 'boolean') {
+    elevation.value = data.elevation
+  }
 }
 
 async function refreshStatus() {
@@ -357,7 +369,7 @@ async function onStart() {
     return
   }
   try {
-    const data = await startRoute(pbfPath.value.trim())
+    const data = await startRoute(pbfPath.value.trim(), elevation.value)
     applyStatus(data)
     if (data.phase === 'starting') beginPoll()
   } catch (err) {
@@ -375,11 +387,21 @@ async function onStop() {
   }
 }
 
-function choose(role: 'start' | 'end') {
-  const next = { role, lng: menu.value.lng, lat: menu.value.lat, name: '' }
+function choose(role: Role) {
+  const lng = menu.value.lng
+  const lat = menu.value.lat
   menu.value.show = false
+  if (role === 'via') {
+    const next = { role, lng, lat, name: '' }
+    const endIndex = stops.value.findIndex((item) => item.role === 'end')
+    if (endIndex >= 0) stops.value.splice(endIndex, 0, next)
+    else stops.value.push(next)
+    schedulePlan()
+    return
+  }
+  const next = { role, lng, lat, name: '' }
   const others = stops.value.filter((item) => item.role !== role && item.role !== 'via')
-  const vias = role === 'start' || role === 'end' ? stops.value.filter((item) => item.role === 'via') : []
+  const vias = stops.value.filter((item) => item.role === 'via')
   const start = role === 'start' ? next : others.find((item) => item.role === 'start')
   const end = role === 'end' ? next : others.find((item) => item.role === 'end')
   stops.value = [start, ...vias, end].filter(Boolean) as Stop[]
@@ -406,7 +428,7 @@ async function onGenerate() {
     return
   }
   if (!description.value.trim()) {
-    ElMessage.warning('请填写途径描述')
+    ElMessage.warning('请填写途径名称')
     return
   }
   generating.value = true
@@ -437,12 +459,20 @@ async function onGenerate() {
     ensureRouteLayer()
     drawMarkers()
     fitLine()
-    if (missed.value.length) ElMessage.warning(`有地点没找到：${missed.value.join('、')}`)
+    if (missed.value.length) ElMessage.warning(`没找到 ${missed.value.join('、')}，已沿当前路线放好，拖动或删除后会重新生成路线`)
   } catch (err) {
     ElMessage.error(errorText(err, '生成失败'))
   } finally {
     generating.value = false
   }
+}
+
+function removeVia(item: Stop) {
+  const index = stops.value.indexOf(item)
+  if (index < 0 || item.role !== 'via') return
+  stops.value.splice(index, 1)
+  if (item.name) missed.value = missed.value.filter((name) => name !== item.name)
+  schedulePlan()
 }
 
 function schedulePlan() {
@@ -549,6 +579,11 @@ onBeforeUnmount(() => {
 }
 .missed {
   color: #9a3412;
+}
+.elev-note {
+  margin-left: 8px;
+  color: #888;
+  font-size: 12px;
 }
 .actions {
   display: flex;
