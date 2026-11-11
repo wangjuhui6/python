@@ -26,3 +26,4 @@ app/data/georef/
 app/data/train-legend/
 app/route_engine/__pycache__/
 excel_fill/__pycache__/
+app/data/
