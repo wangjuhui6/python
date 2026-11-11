@@ -1,6 +1,7 @@
 # -*- mode: python ; coding: utf-8 -*-
 
 import os
+from PyInstaller.utils.hooks import collect_submodules
 
 # llama-cpp 用 ctypes 按 llama_cpp/lib 找 dll，PyInstaller 不会自动收这些文件。
 _llama_lib = os.path.join('venv', 'Lib', 'site-packages', 'llama_cpp', 'lib')
@@ -25,16 +26,19 @@ if os.path.isdir(_tools_root):
         elif os.path.isfile(_src):
             _tool_datas.append((_src, 'tools'))
 
+# 填写窗口在仓库的 excel_fill 包里，打包时要收进 exe
+_repo_root = os.path.abspath(os.path.join(SPECPATH, '..'))
+
 a = Analysis(
     ['start.py'],
-    pathex=[],
+    pathex=[_repo_root],
     binaries=_llama_bins,
     datas=[
         ('html', 'html'),
         ('icon.ico', '.'),
         ('docker-compose.yml', '.'),
     ] + _tool_datas,
-    hiddenimports=[],
+    hiddenimports=collect_submodules('openpyxl') + ['excel_fill', 'excel_fill.fill_excel', 'et_xmlfile'],
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],

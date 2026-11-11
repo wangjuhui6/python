@@ -25,3 +25,4 @@ app/vendor/postgis/*.tar
 app/data/georef/
 app/data/train-legend/
 app/route_engine/__pycache__/
+excel_fill/__pycache__/

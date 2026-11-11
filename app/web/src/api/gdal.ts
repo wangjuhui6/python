@@ -39,6 +39,14 @@ export async function osmPbfToMbtilesStop(): Promise<any> {
   })
 }
 
+export async function imageToMbtiles(data: any): Promise<any> {
+  return await service({
+    url: '/gdal/imageToMbtiles',
+    method: 'post',
+    data
+  })
+}
+
 // shp 获取字段
 export async function getShpFields(data: any): Promise<string> {
   return await service({

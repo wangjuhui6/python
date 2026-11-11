@@ -4,7 +4,7 @@ import urllib.parse
 import urllib.request
 
 from llm.engine import chat
-from route_engine.road_index import search_places
+from route_engine.road_index import search_boxes, search_places
 from route_engine.service import current_pbf, plan
 
 _USER_AGENT = "local-route-app/1.0"
@@ -294,11 +294,21 @@ def _search_local(query: str, bounds=None):
   if not pbf:
     return []
   try:
-    return search_places(pbf, query, bounds)
+    return search_places(pbf, query, bounds, exact=True)
   except OSError as exc:
     raise ValueError("无法读取路网文件") from exc
   except Exception as exc:
     raise ValueError("无法从路网文件读取道路名称") from exc
+
+
+def _roads_in_box(boxes):
+  pbf = current_pbf()
+  if not pbf or not boxes:
+    return []
+  try:
+    return search_boxes(pbf, boxes, limit=150)
+  except Exception:
+    return []
 
 
 def _search_nominatim(query: str, viewbox: str = "", bounded: bool = False):
@@ -926,21 +936,170 @@ def _geom_side(ray, geom):
   return sum(_right_km(ray[0], ray[1], item) for item in band) / len(band)
 
 
-def _turn_on_right(prev_geom, next_geom, later_geom, here):
-  # 先看再下一段 D，它决定这一步是右转还是左转；D 不明确时才看下一条路 C。
-  ray = _travel_ray(prev_geom, next_geom, here)
+def _turn_on_right(prev_geom, next_geom, later_geom, here, ray=None):
+  # 下一条路 C 决定这一步左转还是右转。C 左右不分时，再看再下一条路。
+  ray = ray or _travel_ray(prev_geom, next_geom, here)
   if not ray and later_geom:
     ray = _travel_ray(prev_geom, later_geom, here)
   if not ray:
     return None
-  if later_geom:
-    side = _geom_side(ray, later_geom)
-    if side is not None and abs(side) >= 0.03:
-      return side > 0
   side = _geom_side(ray, next_geom)
+  if (side is None or abs(side) < 0.03) and later_geom:
+    side = _geom_side(ray, later_geom)
   if side is None or abs(side) < 0.03:
     return None
   return side > 0
+
+
+def _meet_ray(prev_geom, here, options, origin=None, dest=None):
+  # 从当前所在位置开往前方的路口，不把已经落在起点后面的交会点当成行进方向。
+  contacts = []
+  for item in options:
+    shape = item.get("shape")
+    if not item.get("line") or not shape:
+      continue
+    hit = _gap_on(shape, prev_geom)
+    if hit:
+      contacts.append((hit[1], hit[2]))
+  if not contacts or not prev_geom:
+    return None
+  pool = contacts
+  if here is not None and origin is not None and dest is not None:
+    anchor_prog = _progress_km(origin, dest, here)
+    ahead = [
+      point for point in contacts
+      if _progress_km(origin, dest, point) >= anchor_prog - 0.4
+    ]
+    if ahead:
+      pool = ahead
+  if here is not None:
+    junction = min(pool, key=lambda point: _km(point[0], point[1], here[0], here[1]))
+  else:
+    junction = pool[0]
+  origin = here
+  if origin is None or _km(origin[0], origin[1], junction[0], junction[1]) < 0.04:
+    if len(prev_geom) < 2:
+      return None
+    origin = max(prev_geom, key=lambda point: _km(point[0], point[1], junction[0], junction[1]))
+  if origin is None or _km(origin[0], origin[1], junction[0], junction[1]) < 0.04:
+    return None
+  return origin, junction
+
+
+def _leave_bearing(item):
+  shape = item.get("shape") or []
+  if len(shape) < 2:
+    return None
+  if item.get("meet_lng") is not None:
+    near = (item["meet_lng"], item["meet_lat"])
+  elif item.get("near_lng") is not None:
+    near = (item["near_lng"], item["near_lat"])
+  else:
+    return None
+  far = max(shape, key=lambda point: _km(point[0], point[1], near[0], near[1]))
+  if _km(near[0], near[1], far[0], far[1]) <= 0.03:
+    return None
+  return _bearing(near, far)
+
+
+def _branch_side(item, ray):
+  # 用离开路口的方向判断这一支在左还是在右，交会点本身分不出左右。
+  leave = _leave_bearing(item)
+  if leave is None or not ray:
+    return item.get("right_km", 0.0)
+  if item.get("meet_lng") is not None:
+    junction = (item["meet_lng"], item["meet_lat"])
+  else:
+    junction = (item["lng"], item["lat"])
+  lat = junction[1] + math.cos(leave) * 0.2 / 111.0
+  lng = junction[0] + math.sin(leave) * 0.2 / max(20.0, 111.0 * math.cos(math.radians(junction[1])))
+  return _right_km(ray[0], ray[1], (lng, lat))
+
+
+def _progress_km(origin, dest, point):
+  return _along(origin, dest, point[0], point[1]) * max(_km(origin[0], origin[1], dest[0], dest[1]), 0.001)
+
+
+def _heading_km(item, ray):
+  # 线自己的方向朝左还是朝右。往左的线小于 0。
+  way = item.get("way")
+  if way is None or not ray:
+    return item.get("right_km", 0.0)
+  if item.get("meet_lng") is not None:
+    junction = (item["meet_lng"], item["meet_lat"])
+  else:
+    junction = (item["lng"], item["lat"])
+  lat = junction[1] + math.cos(way) * 0.2 / 111.0
+  lng = junction[0] + math.sin(way) * 0.2 / max(20.0, 111.0 * math.cos(math.radians(junction[1])))
+  return _right_km(ray[0], ray[1], (lng, lat))
+
+
+def _sit_at_crossing(item):
+  # 点放在两条路交会处，再顺着这条线的方向挪出几十米。
+  item["lng"] = item["meet_lng"]
+  item["lat"] = item["meet_lat"]
+  way = item.get("way")
+  if way is not None:
+    step = 0.04
+    lat = item["lat"] + math.cos(way) * step / 111.0
+    lng = item["lng"] + math.sin(way) * step / max(20.0, 111.0 * math.cos(math.radians(item["lat"])))
+    item["lng"], item["lat"] = lng, lat
+  item["near_lng"] = item["lng"]
+  item["near_lat"] = item["lat"]
+  if item.get("shape"):
+    item["shape"] = _clip_shape(item["shape"], item["lng"], item["lat"], 0.25)
+
+
+def _crossing_choice(branches, on_right, here, origin, dest, ray):
+  # 先取靠近上一个点、并且不走到起点后面的那个路口，再按 C 决定左右。
+  if not branches or on_right is None:
+    return [], ""
+  anchor = here if here is not None else (origin[0], origin[1])
+  anchor_prog = _progress_km(origin, dest, anchor)
+
+  def meet_key(item):
+    point = (item["meet_lng"], item["meet_lat"])
+    behind = 1 if _progress_km(origin, dest, point) < anchor_prog - 0.4 else 0
+    return (
+      behind,
+      _km(point[0], point[1], anchor[0], anchor[1]),
+      _km(point[0], point[1], dest[0], dest[1]),
+    )
+
+  best = min(branches, key=meet_key)
+  junction = (best["meet_lng"], best["meet_lat"])
+  local = [
+    item for item in branches
+    if _km(item["meet_lng"], item["meet_lat"], junction[0], junction[1]) <= 0.3
+  ]
+  for item in local:
+    item["heading_km"] = _heading_km(item, ray)
+  if on_right:
+    side = [item for item in local if _heading_km(item, ray) >= -0.04]
+    # 右转用旁边、方向往右的那条线。
+    picked = [item for item in side if item.get("forward") and _heading_km(item, ray) > 0.02] or [item for item in side if item.get("forward")] or side
+    turn = "right"
+  else:
+    side = [item for item in local if _heading_km(item, ray) <= 0.04]
+    # 左转用方向往左的那条线，点仍在路口上。
+    picked = [item for item in side if _heading_km(item, ray) < -0.02] or side
+    turn = "left"
+  for item in picked:
+    _sit_at_crossing(item)
+    item["cross_turn"] = turn
+  return picked, turn
+
+
+def _is_cross_branch(item, ray):
+  # 离开上一条路的方向和行进方向差开，说明这是路口分出去的一支，不是对向车道。
+  if not ray or not item.get("line"):
+    return False
+  leave = _leave_bearing(item)
+  travel = _bearing(ray[0], ray[1])
+  if leave is None or travel is None:
+    return False
+  angle = _turn(leave, travel)
+  return math.radians(35) <= angle <= math.radians(150)
 
 
 def _later_geom(next_geom, later_rows):
@@ -1131,6 +1290,7 @@ def _place_between(feature, prev_geom, next_geom, origin, dest, reach=6.0, link=
   separated = _km(left[1], left[2], right[1], right[2]) > 0.05
   near = (left[1], left[2])
   near_seg = left[3]
+  meet = (left[1], left[2])
   if separated:
     want = _bearing((left[1], left[2]), (right[1], right[2]))
   else:
@@ -1166,6 +1326,7 @@ def _place_between(feature, prev_geom, next_geom, origin, dest, reach=6.0, link=
     "gap": left[0] + right[0],
     "forward": forward,
     "turn": turn,
+    "way": way,
     "line": True,
     "poi": poi,
     "shape": shape,
@@ -1174,13 +1335,16 @@ def _place_between(feature, prev_geom, next_geom, origin, dest, reach=6.0, link=
     "prev_dist": left[0],
     "near_lng": near[0],
     "near_lat": near[1],
+    "meet_lng": meet[0],
+    "meet_lat": meet[1],
+    "full_shape": list(shape),
     "trip": right[0],
     "lateral": lateral,
     "ratio": ratio,
   }
 
 
-def _choose_between(rows, prev_geom, next_rows, fallback, origin, dest, query, reach=6.0, gate="", here=None, later_rows=None):
+def _ranked_options(rows, prev_geom, next_rows, fallback, origin, dest, query, reach=6.0, gate="", here=None, later_rows=None):
   if gate == "enter":
     highway_rows = [row for row in (next_rows or []) if _is_expressway(row.get("label") or "") or _is_expressway(row.get("query") or "")]
     if highway_rows:
@@ -1192,24 +1356,37 @@ def _choose_between(rows, prev_geom, next_rows, fallback, origin, dest, query, r
     placed = _place_between(row, prev_geom, next_geom, origin, dest, reach, link, gate)
     if placed:
       options.append(placed)
-  ray = _travel_ray(prev_geom, next_geom, here)
+  ray = _meet_ray(prev_geom, here, options, origin, dest) or _travel_ray(prev_geom, next_geom, here)
   later_geom = _later_geom(next_geom, later_rows)
   for item in options:
     item["right_km"] = _right_km(ray[0], ray[1], (item["lng"], item["lat"])) if ray else 0.0
-  on_right = _turn_on_right(prev_geom, next_geom, later_geom, here)
+  on_right = _turn_on_right(prev_geom, next_geom, later_geom, here, ray)
   if gate in ("exit", "enter"):
     # 出入口靠右：先上右侧匝道，左侧是对向的口。
     right_tolls = [item for item in options if item.get("poi") and item.get("right_km", 0.0) >= -0.02]
     if right_tolls and len(right_tolls) < len([item for item in options if item.get("poi")]):
       options = [item for item in options if not item.get("poi") or item.get("right_km", 0.0) >= -0.02]
-  elif on_right is False and any(item.get("line") and not item["forward"] for item in options):
-    # 下一条路在左边，靠右行驶要换到对向车道。
-    options = [item for item in options if not item.get("line") or not item["forward"]]
-  elif any(item["forward"] for item in options):
-    # 下一条路在右边或正前方，留在靠近当前的这一侧。
-    options = [item for item in options if item["forward"]]
+  else:
+    branches = [item for item in options if _is_cross_branch(item, ray) and item.get("meet_lng") is not None]
+    for item in branches:
+      item["right_km"] = _branch_side(item, ray)
+    sided, _turn = _crossing_choice(branches, on_right, here, origin, dest, ray)
+    if sided:
+      options = sided + [item for item in options if not item.get("line")]
+    elif any(item.get("line") and item.get("forward") for item in options):
+      # 当前侧能走就留在当前侧。跑到对向车道会先绕过去再绕回来。
+      options = [item for item in options if not item.get("line") or item.get("forward")]
+    elif on_right is False and any(item.get("line") and not item["forward"] for item in options):
+      options = [item for item in options if not item.get("line") or not item["forward"]]
   if not options:
-    return None
+    return []
+  anchor = here if here is not None else (origin[0], origin[1])
+  anchor_prog = _progress_km(origin, dest, anchor)
+  for item in options:
+    item["here_dist"] = _km(item["lng"], item["lat"], anchor[0], anchor[1])
+    item["start_dist"] = _km(item["lng"], item["lat"], origin[0], origin[1])
+    item["end_dist"] = _km(item["lng"], item["lat"], dest[0], dest[1])
+    item["behind"] = 1 if _progress_km(origin, dest, (item["lng"], item["lat"])) < anchor_prog - 0.4 else 0
   if gate == "exit":
     # 先上右侧匝道，再过出口。右侧更靠匝道外侧的口优先。
     options.sort(key=lambda item: (
@@ -1225,24 +1402,24 @@ def _choose_between(rows, prev_geom, next_rows, fallback, origin, dest, query, r
       -item.get("right_km", 0.0),
     ))
   else:
-    if on_right is True:
-      # 右转可以走右侧辅道，它往往比主路更靠近下一条路。
-      options.sort(key=lambda item: (
-        0 if item.get("right_km", 0.0) >= -0.02 else 1,
-        item.get("trip", item["dist"]),
-        item.get("prev_dist", item["dist"]),
-      ))
-    else:
-      options.sort(key=lambda item: (
-        item.get("prev_dist", item["dist"]),
-        item.get("lateral", 0.0),
-        item.get("turn", 0.0),
-      ))
-  best = options[0]
-  if _forked(options) and best.get("line") and not best.get("poi") and best.get("near_lng") is not None:
-    best["lng"] = best["near_lng"]
-    best["lat"] = best["near_lat"]
-    best["shape"] = _clip_shape(best["shape"], best["lng"], best["lat"])
+    # 路口的点已经落在交会处。其余的点先留在当前侧，再尽量靠近上一个点。
+    options.sort(key=lambda item: (
+      0 if item.get("cross_turn") != "left" or item.get("heading_km", item.get("right_km", 0.0)) < 0 else 1,
+      item.get("behind", 0),
+      item.get("here_dist", item.get("prev_dist", item["dist"])),
+      item.get("end_dist", 0.0),
+      item.get("lateral", 0.0),
+    ))
+    nearest = options[0].get("here_dist", 0.0)
+    # 同一侧只留靠近上一条路的点，不把点放到这条路的远处。
+    options = [
+      item for item in options
+      if not item.get("line") or item.get("here_dist", 0.0) <= nearest + 0.4
+    ]
+  return options
+
+
+def _slot_from(best, query, origin, dest, gate):
   feature = best["feature"]
   label = feature.get("label") or query
   frontage = bool(feature.get("frontage")) or any(mark in (label or "") for mark in ("辅道", "辅路", "辅线"))
@@ -1250,7 +1427,7 @@ def _choose_between(rows, prev_geom, next_rows, fallback, origin, dest, query, r
   if best.get("poi") and shape:
     # 只把收费口附近交给下一段，整条匝道会把后面的路带到远处。
     shape = _clip_shape(shape, best["lng"], best["lat"], 0.25)
-  return {
+  slot = {
     "query": query,
     "name": label,
     "lng": best["lng"],
@@ -1262,6 +1439,496 @@ def _choose_between(rows, prev_geom, next_rows, fallback, origin, dest, query, r
     "meet": "之间",
     "gate": gate,
   }
+  if best.get("full_shape"):
+    slot["full_shape"] = best["full_shape"]
+  if best.get("way") is not None:
+    slot["way"] = best["way"]
+  if best.get("cross_turn"):
+    slot["cross_turn"] = best["cross_turn"]
+  if best.get("meet_lng") is not None:
+    slot["meet_lng"] = best["meet_lng"]
+    slot["meet_lat"] = best["meet_lat"]
+  return slot
+
+
+def _finish_choice(options, query, origin, dest, gate):
+  if not options:
+    return None
+  best = options[0]
+  if (
+    gate not in ("exit", "enter")
+    and best.get("line")
+    and not best.get("poi")
+    and best.get("near_lng") is not None
+    and (_forked(options) or _km(best["lng"], best["lat"], best["near_lng"], best["near_lat"]) > 0.25)
+  ):
+    best = dict(best)
+    best["lng"] = best["near_lng"]
+    best["lat"] = best["near_lat"]
+    best["shape"] = _clip_shape(best["shape"], best["lng"], best["lat"])
+  return _slot_from(best, query, origin, dest, gate)
+
+
+def _choose_between(rows, prev_geom, next_rows, fallback, origin, dest, query, reach=6.0, gate="", here=None, later_rows=None):
+  return _finish_choice(
+    _ranked_options(rows, prev_geom, next_rows, fallback, origin, dest, query, reach, gate, here, later_rows),
+    query, origin, dest, gate,
+  )
+
+
+def _along_of(path, point):
+  found = _closest_on_shape(path, point[0], point[1])
+  if not found:
+    return None
+  seg = max(int(found[3]), 1)
+  walked = 0.0
+  for index in range(1, seg):
+    walked += _km(path[index - 1][0], path[index - 1][1], path[index][0], path[index][1])
+  walked += _km(path[seg - 1][0], path[seg - 1][1], found[1], found[2])
+  return walked, (found[1], found[2])
+
+
+def _segment_gap(a, b, c, d):
+  # 两条线段的最近距离（公里），以及落在第一条线段上的点。
+  scale = max(0.2, math.cos(math.radians((a[1] + b[1]) / 2)))
+
+  def xy(point):
+    return ((point[0] - a[0]) * scale * 111.0, (point[1] - a[1]) * 111.0)
+
+  bx, by = xy(b)
+  cx, cy = xy(c)
+  dx, dy = xy(d)
+  rx, ry = dx - cx, dy - cy
+  denom = bx * ry - by * rx
+  if abs(denom) < 1e-9:
+    candidates = []
+    for ux in (0.0, 1.0):
+      px, py = bx * ux, by * ux
+      length = math.hypot(rx, ry)
+      if length < 1e-9:
+        vx = 0.0
+      else:
+        vx = min(1.0, max(0.0, ((px - cx) * rx + (py - cy) * ry) / (length * length)))
+      qx, qy = cx + rx * vx, cy + ry * vx
+      candidates.append((math.hypot(px - qx, py - qy), ux))
+    dist, ux = min(candidates)
+  else:
+    ux = min(1.0, max(0.0, (cx * ry - cy * rx) / denom))
+    vx = min(1.0, max(0.0, (cx * by - cy * bx) / denom))
+    px, py = bx * ux, by * ux
+    qx, qy = cx + rx * vx, cy + ry * vx
+    dist = math.hypot(px - qx, py - qy)
+  return dist, (a[0] + (b[0] - a[0]) * ux, a[1] + (b[1] - a[1]) * ux)
+
+
+def _crossings_until(path, own_names, stop_names):
+  # 沿这条路查出交会的路，直到下一条指定路名。先全部记下，是否接到下一条路另作返回。
+  if len(path) < 2 or not stop_names:
+    return [], False
+  boxes = []
+  for lng, lat in path:
+    pad_lat = 0.35 / 111.0
+    pad_lng = 0.35 / max(20.0, 111.0 * math.cos(math.radians(lat)))
+    boxes.append((lng - pad_lng, lat - pad_lat, lng + pad_lng, lat + pad_lat))
+  hits = []
+  for road in _roads_in_box(boxes):
+    name = (road.get("label") or "").strip()
+    other = road.get("shape") or []
+    if not name or name in own_names or len(other) < 2:
+      continue
+    best = None
+    for index in range(len(path) - 1):
+      for other_index in range(len(other) - 1):
+        dist, point = _segment_gap(path[index], path[index + 1], other[other_index], other[other_index + 1])
+        if best is None or dist < best[0]:
+          best = (dist, point, index, other_index)
+    if not best or best[0] > 0.08:
+      continue
+    placed = _along_of(path, best[1])
+    if not placed:
+      continue
+    our_way = _bearing(path[best[2]], path[best[2] + 1])
+    their_way = _bearing(other[best[3]], other[best[3] + 1])
+    if our_way is not None and their_way is not None and _turn(our_way, their_way) < math.radians(25):
+      continue
+    hits.append((placed[0], placed[1], name))
+  hits.sort(key=lambda item: item[0])
+  chosen = []
+  found = False
+  for along, point, name in hits:
+    if along < 0.12:
+      continue
+    if name in stop_names:
+      found = True
+      break
+    if any(_km(point[0], point[1], prev[0], prev[1]) < 0.3 for prev in chosen):
+      continue
+    chosen.append(point)
+  return chosen, found
+
+
+def _shape_key(shape):
+  start = (round(shape[0][0], 5), round(shape[0][1], 5))
+  end = (round(shape[-1][0], 5), round(shape[-1][1], 5))
+  return (start, end) if start <= end else (end, start)
+
+
+def _directed_slice(shape, start, bearing, meet):
+  # 从已选点出发，只留顺着已选走向的那一半。
+  found = _closest_on_shape(shape, start[0], start[1])
+  if not found:
+    return []
+  seg = max(int(found[3]), 1)
+  point = (found[1], found[2])
+  ahead = [point] + [item for item in shape[seg:] if _km(item[0], item[1], point[0], point[1]) > 0.01]
+  behind = [point] + [item for item in reversed(shape[:seg]) if _km(item[0], item[1], point[0], point[1]) > 0.01]
+
+  def score(part):
+    if len(part) < 2:
+      return (math.pi, 1)
+    step = _bearing(part[0], part[min(len(part) - 1, 3)])
+    angle = _turn(step, bearing) if step is not None and bearing is not None else 0.0
+    back = 0
+    if meet is not None and _km(part[-1][0], part[-1][1], meet[0], meet[1]) + 0.05 < _km(point[0], point[1], meet[0], meet[1]):
+      back = 1
+    return (angle, back)
+
+  best = min((ahead, behind), key=score)
+  if len(best) < 2:
+    other = behind if best is ahead else ahead
+    if len(other) >= 2 and (bearing is None or score(other)[0] <= math.radians(80)):
+      best = other
+  if len(best) >= 2:
+    return best
+  if bearing is None:
+    return []
+  lat = point[1] + math.cos(bearing) * 0.05 / 111.0
+  lng = point[0] + math.sin(bearing) * 0.05 / max(20.0, 111.0 * math.cos(math.radians(point[1])))
+  return [point, (lng, lat)]
+
+
+def _next_piece(end, bearing, rows, name, used):
+  # 同一路名、同一走向的下一段。路口处换到另一条路就停。
+  best = None
+  for row in rows or []:
+    if (row.get("label") or "").strip() != name:
+      continue
+    shape = row.get("shape") or []
+    if len(shape) < 2:
+      continue
+    key = _shape_key(shape)
+    if key in used:
+      continue
+    if _km(shape[0][0], shape[0][1], end[0], end[1]) <= 0.12:
+      part = list(shape)
+    elif _km(shape[-1][0], shape[-1][1], end[0], end[1]) <= 0.12:
+      part = list(reversed(shape))
+    else:
+      continue
+    step = _bearing(part[0], part[min(len(part) - 1, 3)])
+    angle = _turn(bearing, step) if bearing is not None and step is not None else 0.0
+    if angle > math.radians(70):
+      continue
+    dist = _km(part[0][0], part[0][1], end[0], end[1])
+    if best is None or angle < best[0] - 0.15 or (abs(angle - best[0]) <= 0.15 and dist < best[1]):
+      best = (angle, dist, part, key)
+  if not best:
+    return None
+  used.add(best[3])
+  return best[2]
+
+
+def _forward_path(hit, rows):
+  # 走向和点位已经定了，就从这里顺着这条路继续往前接。
+  shape = hit.get("full_shape") or []
+  if len(shape) < 2 or hit.get("lng") is None:
+    return []
+  start = (hit["lng"], hit["lat"])
+  meet = (hit["meet_lng"], hit["meet_lat"]) if hit.get("meet_lng") is not None else None
+  path = _directed_slice(shape, start, hit.get("way"), meet)
+  if len(path) < 2:
+    return []
+  name = (hit.get("name") or "").strip()
+  used = {_shape_key(shape)}
+  walked = 0.0
+  for index in range(1, len(path)):
+    walked += _km(path[index - 1][0], path[index - 1][1], path[index][0], path[index][1])
+  for _ in range(40):
+    if walked >= 45:
+      break
+    piece = _next_piece(path[-1], _bearing(path[-2], path[-1]), rows, name, used)
+    if not piece:
+      break
+    for point in piece[1:]:
+      walked += _km(path[-1][0], path[-1][1], point[0], point[1])
+      path.append(point)
+      if walked >= 45:
+        break
+  return path
+
+
+def _next_is_toll(next_rows):
+  for row in next_rows or []:
+    for key in ("label", "query"):
+      if _is_toll_name(row.get(key) or ""):
+        return True
+  return False
+
+
+def _path_meets(path, rows, limit=0.45):
+  # 线已经和下一条路交上或靠得很近，就说明这条选点是接上的。
+  for row in rows or []:
+    geom = _row_geom(row)
+    if len(path) >= 2 and len(geom) >= 2:
+      nearest = None
+      for index in range(len(path) - 1):
+        for other in range(len(geom) - 1):
+          dist, _point = _segment_gap(path[index], path[index + 1], geom[other], geom[other + 1])
+          if nearest is None or dist < nearest:
+            nearest = dist
+      if nearest is not None and nearest <= limit:
+        return True
+      continue
+    if geom:
+      gap = _gap_on(path, geom)
+      if gap and gap[0] <= limit:
+        return True
+  return False
+
+
+def _extra_along(hit, rows, next_rows, dest):
+  # 沿路路口只用来确认能不能接到下一条路，不生成途径点。
+  # 收费站和已经靠上下一条路的点按靠右、出入口规则保留。走到头仍没有，才返回 None。
+  if not hit or hit.get("guess") or hit.get("gate") or not hit.get("road"):
+    return []
+  if _next_is_toll(next_rows):
+    return []
+  path = _forward_path(hit, rows)
+  if len(path) < 2:
+    return []
+  own_names = {(hit.get("name") or "").strip(), (hit.get("query") or "").strip()}
+  own_names.discard("")
+  stop_names = set()
+  for row in next_rows or []:
+    for key in ("label", "query"):
+      name = (row.get(key) or "").strip()
+      if name:
+        stop_names.add(name)
+  if not stop_names:
+    return []
+  _crossings, found = _crossings_until(path, own_names, stop_names)
+  if found or _path_meets(path, next_rows):
+    return []
+  return None
+
+
+def _point_after(prev, dest, step_km=0.2):
+  # 紧挨着上一个点，沿已有走向往前放一小段。
+  start = (float(prev["lng"]), float(prev["lat"]))
+  if dest is not None:
+    room = _km(start[0], start[1], dest[0], dest[1])
+    if room < step_km * 1.6:
+      step_km = max(0.08, room * 0.45)
+  bearing = prev.get("way")
+  if bearing is None and dest is not None and _km(start[0], start[1], dest[0], dest[1]) > 0.05:
+    bearing = _bearing(start, (dest[0], dest[1]))
+  shape = prev.get("full_shape") or prev.get("road_shape") or []
+  if len(shape) >= 2 and bearing is not None:
+    path = _directed_slice(shape, start, bearing, None)
+    walked = 0.0
+    for index in range(1, len(path)):
+      seg = _km(path[index - 1][0], path[index - 1][1], path[index][0], path[index][1])
+      if seg <= 1e-9:
+        continue
+      if walked + seg >= step_km:
+        ratio = (step_km - walked) / seg
+        return (
+          path[index - 1][0] + (path[index][0] - path[index - 1][0]) * ratio,
+          path[index - 1][1] + (path[index][1] - path[index - 1][1]) * ratio,
+        )
+      walked += seg
+  if bearing is None:
+    bearing = 0.0
+  lat = start[1] + math.cos(bearing) * step_km / 111.0
+  lng = start[0] + math.sin(bearing) * step_km / max(20.0, 111.0 * math.cos(math.radians(start[1])))
+  return lng, lat
+
+
+def _stand_in(hit, prev, dest):
+  # 这条路走到头仍接不到下一条路，先不用这个点，改放到上一个点后面。
+  lng, lat = _point_after(prev, dest)
+  return {
+    "query": hit.get("query"),
+    "name": hit.get("name"),
+    "lng": lng,
+    "lat": lat,
+    "road": False,
+    "route_along": _along((prev["lng"], prev["lat"]), dest, lng, lat),
+    "route_dist": hit.get("route_dist"),
+    "road_shape": None,
+    "meet": "之间",
+  }
+
+
+def _attach_along(hit, rows, next_rows, prev, dest):
+  extras = _extra_along(hit, rows, next_rows, dest)
+  if extras is None:
+    return [_stand_in(hit, prev, dest)]
+  return [hit] + extras
+
+
+def _distinct_options(options, limit):
+  kept = []
+  for item in options or []:
+    if any(_km(item["lng"], item["lat"], prev["lng"], prev["lat"]) < 0.12 for prev in kept):
+      continue
+    kept.append(item)
+    if len(kept) >= limit:
+      break
+  return kept
+
+
+def _option_note(item, gate):
+  label = (item.get("feature") or {}).get("label") or ""
+  if gate == "enter":
+    role = "入口"
+  elif gate == "exit":
+    role = "出口"
+  elif item.get("feature", {}).get("frontage") or any(mark in label for mark in ("辅道", "辅路", "辅线")):
+    role = "辅道"
+  elif item.get("forward"):
+    role = "当前侧"
+  else:
+    role = "对向"
+  side = item.get("right_km", 0.0)
+  if side >= 0.03:
+    hand = "右"
+  elif side <= -0.03:
+    hand = "左"
+  else:
+    hand = "正"
+  return (
+    f"{role} {hand} 离上一个点{item.get('here_dist', item.get('prev_dist', item.get('dist', 0))):.1f}"
+    f" 离起点{item.get('start_dist', 0):.1f} 离终点{item.get('end_dist', 0):.1f}"
+  )
+
+
+_PICK_SYSTEM = (
+  "你是路线规划助手。只输出 JSON，不要解释。"
+  "通盘看整条路线，起点坐标和终点坐标都要算进去，每个名称只能选一个编号。"
+  "编号 a 是离上一个点最近的默认点。只有换成别的点整条更顺、而且仍然靠近上一个点时才改。"
+  "第一个点要靠近起点，之后每个点尽量靠近上一个点，最后一个点要能接到终点。"
+  "从一条路转到下一条路，左右都是下一条路时，看再下一条路决定转向。"
+  "左转选下一条路里方向往左的那条线，点在两条路交会处。右转选旁边、方向往右的那条线。"
+  "不要折返，不要把点放到远离路口的地方。直行不要改到对向车道。"
+  "收费站后面是高速选入口，从高速下来选出口，出入口走右侧。"
+  "顺序不能变，不能新增名称，不能自己编坐标。"
+  "输出 {\"picks\":[\"1a\",\"2b\"]}，编号必须来自候选。"
+)
+
+
+def _ask_route(offers, origin, dest):
+  # 每处只有一个点时，几何结果就是唯一选择。
+  if not any(len(group.get("options") or []) > 1 for group in offers):
+    return []
+  lines = [
+    f"起点坐标 {origin[0]:.5f},{origin[1]:.5f}",
+    f"终点坐标 {dest[0]:.5f},{dest[1]:.5f}",
+    "选点时把起点坐标和终点坐标一起考虑。第一个点靠近起点，之后尽量靠近上一个点，最后一个点接到终点。左右都是下一条路时，看再下一条路：左转用方向往左的那条线，右转用旁边往右的那条线，点都在路口上。",
+    "整条顺序：" + " → ".join(group["name"] for group in offers),
+    "默认接法：" + " → ".join(
+      f"{group['name']} {group['options'][0]['lng']:.4f},{group['options'][0]['lat']:.4f}"
+      for group in offers
+      if group.get("options")
+    ),
+  ]
+  for group in offers:
+    lines.append(group["name"])
+    for item in group["options"]:
+      lines.append(f"{item['offer_id']} {item['lng']:.5f},{item['lat']:.5f} {_option_note(item, group.get('gate') or '')}")
+  try:
+    data = _json_object(chat(
+      [
+        {"role": "system", "content": _PICK_SYSTEM},
+        {"role": "user", "content": "\n".join(lines)},
+      ],
+      temperature=0.1,
+      json_mode=True,
+      max_tokens=240,
+    ))
+  except (ValueError, RuntimeError):
+    return []
+  found = []
+  for item in data.get("picks") or []:
+    mark = str(item or "").strip().lower()
+    if mark and mark not in found:
+      found.append(mark)
+  return found
+
+
+def _apply_picks(slots, offers, picks, origin, dest):
+  by_id = {}
+  for group in offers:
+    for item in group.get("options") or []:
+      by_id[item["offer_id"]] = (group, item)
+  chosen = {}
+  for mark in picks or []:
+    pair = by_id.get(mark)
+    if pair and pair[0]["name"] not in chosen:
+      chosen[pair[0]["name"]] = pair[1]
+  if not chosen:
+    return slots
+  updated = list(slots)
+  previous = (origin[0], origin[1])
+  primaries = [(index, slot) for index, slot in enumerate(slots) if not slot.get("along")]
+  for (index, slot), group in zip(primaries, offers):
+    picked = chosen.get(group["name"])
+    options = group.get("options") or []
+    if not picked or not options or slot.get("guess") or picked is options[0]:
+      if slot.get("lng") is not None:
+        previous = (slot["lng"], slot["lat"])
+      continue
+    base = options[0]
+    jumped = _km(picked["lng"], picked["lat"], previous[0], previous[1])
+    base_jump = _km(base["lng"], base["lat"], previous[0], previous[1])
+    forward_exists = any(item.get("line") and item.get("forward") for item in options)
+    left_turn = base.get("cross_turn") == "left"
+    if left_turn:
+      wrong_side = picked.get("heading_km", picked.get("right_km", 0.0)) >= -0.02 and base.get("heading_km", -1) < -0.02
+    else:
+      wrong_side = forward_exists and picked.get("line") and not picked.get("forward")
+    # 左转可以换成同路口的对向点。直行不能跑到对向，也不能比默认点离上一个点更远一截。
+    if wrong_side or jumped > base_jump + 1.0 or jumped > max(8.0, base_jump * 3):
+      if slot.get("lng") is not None:
+        previous = (slot["lng"], slot["lat"])
+      continue
+    hit = _slot_from(picked, group["name"], origin, dest, group.get("gate") or "")
+    updated[index] = hit
+    previous = (hit["lng"], hit["lat"])
+  return updated
+
+
+def _refill_along(slots, loaded, dest, origin):
+  # 选点确定后，再沿路核对下一条路。对不上就改到上一个点后面，沿路路口不生成途径点。
+  groups = []
+  index = 0
+  while index < len(slots):
+    slot = slots[index]
+    index += 1
+    if slot.get("along"):
+      continue
+    while index < len(slots) and slots[index].get("along"):
+      index += 1
+    groups.append(slot)
+  rebuilt = []
+  previous = {"lng": origin[0], "lat": origin[1]}
+  for pos, slot in enumerate(groups):
+    rows = loaded[pos] if pos < len(loaded) else []
+    next_rows = loaded[pos + 1] if pos + 1 < len(loaded) else []
+    group = _attach_along(slot, rows, next_rows, previous, dest)
+    rebuilt.extend(group)
+    previous = group[-1]
+  return rebuilt
 
 
 def _chain_names(names, origin, dest, route):
@@ -1270,6 +1937,9 @@ def _chain_names(names, origin, dest, route):
   fallback = [(dest[0], dest[1])]
   slots = []
   missed = []
+  offers = []
+  limit = 3 if len(names) <= 6 else 2
+  letters = "abc"
   for index, name in enumerate(names):
     next_name = names[index + 1] if index + 1 < len(names) else ""
     next_rows = loaded[index + 1] if index + 1 < len(names) else []
@@ -1278,19 +1948,26 @@ def _chain_names(names, origin, dest, route):
     here = (prev["lng"], prev["lat"]) if "lng" in prev else None
     gate = _toll_gate(prev_name, next_name, name, next_rows)
     prev_geom = _geom_of(prev)
-    hit = _choose_between(loaded[index], prev_geom, next_rows, fallback, origin, dest, name, 6.0, gate, here, later_rows)
-    if not hit and len(prev_geom) >= 2:
-      hit = _choose_between(loaded[index], [(prev["lng"], prev["lat"])], next_rows, fallback, origin, dest, name, 6.0, gate, here, later_rows)
-    if not hit:
-      hit = _choose_between(loaded[index], prev_geom, next_rows, fallback, origin, dest, name, 18.0, gate, here, later_rows)
+    ranked = _ranked_options(loaded[index], prev_geom, next_rows, fallback, origin, dest, name, 6.0, gate, here, later_rows)
+    if not ranked and len(prev_geom) >= 2:
+      ranked = _ranked_options(loaded[index], [(prev["lng"], prev["lat"])], next_rows, fallback, origin, dest, name, 6.0, gate, here, later_rows)
+    if not ranked:
+      ranked = _ranked_options(loaded[index], prev_geom, next_rows, fallback, origin, dest, name, 18.0, gate, here, later_rows)
+    distinct = _distinct_options(ranked, 1 if gate in ("exit", "enter") else limit)
+    for pos, item in enumerate(distinct):
+      item["offer_id"] = f"{index + 1}{letters[pos]}"
+    hit = _finish_choice(ranked, name, origin, dest, gate)
     if not hit:
       hit = _chain_hit(prev, name, origin, dest)
+    offers.append({"name": name, "gate": gate, "options": distinct})
     if not hit:
       missed.append(name)
       slots.append(_guess_slot(name))
       continue
-    slots.append(hit)
-    prev = hit
+    slots.extend(_attach_along(hit, loaded[index], next_rows, prev, dest))
+    prev = slots[-1]
+  slots = _apply_picks(slots, offers, _ask_route(offers, origin, dest), origin, dest)
+  slots = _refill_along(slots, loaded, dest, origin)
   return slots, missed
 
 
@@ -1390,6 +2067,7 @@ _DECIDE_SYSTEM = (
   "你是路线规划助手。只输出 JSON，不要解释。"
   "从起点出发，按行进顺序拆开要经过的路和地点，输出 {\"searches\":[\"名称\"]}。"
   "一条一个，不要合并，用户写了几个就保留几个，不要丢掉后面的，最多 12 个。"
+  "路名用用户写的完整名称，不要缩短，也不要改成另一条路。"
   "顺序就是从第一个点开始往下接的顺序。"
   "例如「先走广州大道再过猎德收费站」输出 {\"searches\":[\"广州大道\",\"猎德收费站\"]}。"
   "收费站、服务区、停车区、加油站可以直接用这些词。不要输出坐标。"
@@ -1427,20 +2105,23 @@ def _fill_by_name(names, start_point, end_point, base_route):
 
 
 def _one_along(slots, origin, dest, route):
-  # 每个名称只留一个点。交会距离不是偏离最短路径，头尾几条路不能因此丢掉。
+  # 同一个名称相距很近的只留一个。长路上隔开的点都保留。
   kept = []
   guesses = []
-  seen = set()
   for item in slots:
     name = (item.get("query") or item.get("name") or "").strip()
     if item.get("guess"):
-      if name and name not in seen:
+      if name and not any((prev.get("query") or prev.get("name")) == name for prev in guesses):
         guesses.append(item)
-        seen.add(name)
       continue
-    if name in seen:
+    if "lng" not in item:
       continue
-    seen.add(name)
+    if any(
+      (prev.get("query") or prev.get("name") or "").strip() == name
+      and _km(prev["lng"], prev["lat"], item["lng"], item["lat"]) < 0.1
+      for prev in kept
+    ):
+      continue
     kept.append(item)
   return kept + guesses, []
 
@@ -1449,7 +2130,7 @@ def _extract_places(description: str, start, end) -> list[str]:
   system = (
     "你是路线规划助手。根据用户对途径路线的描述，抽出从起点走向终点时真正要经过的道路、收费站、服务区、加油站或地标。"
     "只输出 JSON，格式为 {\"places\":[\"地点1\",\"地点2\"]}。"
-    "按行进顺序排列，同一条路只保留一次。不要输出区、市、镇这类大范围地名。"
+    "按行进顺序排列，同一条路只保留一次。路名保持用户写的完整名称，不要缩短。"
     "不要包含起点和终点，不要编造描述里没有的地点，不要输出坐标或解释。"
   )
   prompt = (
@@ -1607,8 +2288,14 @@ def describe(profile: str, start, end, description: str):
     item.pop("guess", None)
     item.pop("road", None)
     item.pop("road_shape", None)
+    item.pop("full_shape", None)
+    item.pop("along", None)
     item.pop("meet", None)
     item.pop("gate", None)
+    item.pop("way", None)
+    item.pop("cross_turn", None)
+    item.pop("meet_lng", None)
+    item.pop("meet_lat", None)
   result["places"] = places
   result["missed"] = missed
   return result

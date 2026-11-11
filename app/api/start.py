@@ -2,7 +2,7 @@ from fastapi import FastAPI
 from fastapi import APIRouter
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
-from .routers import base, data, gdal, mbtiles, tkinter, record, postgis, style, llm, route
+from .routers import base, data, gdal, mbtiles, tkinter, record, postgis, style, llm, route, excel_fill
 from .routers.basemap import public_router as basemap_public
 from .routers.basemap import router as basemap_router
 from base import get_request_path
@@ -29,6 +29,7 @@ api_router.include_router(postgis.router)
 api_router.include_router(style.router)
 api_router.include_router(llm.router)
 api_router.include_router(route.router)
+api_router.include_router(excel_fill.router)
 
 api.include_router(api_router)
 api.include_router(basemap_public)

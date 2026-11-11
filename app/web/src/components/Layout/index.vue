@@ -1,7 +1,7 @@
 <template>
   <div class="layout">
     <div class="layout-header">
-      <div></div>
+      <div class="layout-header-side"></div>
       <div class="layout-header-center">
         <div
           v-for="item in routes"
@@ -15,7 +15,9 @@
           {{ item.meta.title }}
         </div>
       </div>
-      <div></div>
+      <div class="layout-header-side layout-header-side-right">
+        <el-button type="primary" :loading="opening" @click="openFill">批量写入表格</el-button>
+      </div>
     </div>
     <div class="layout-two">
       <div
@@ -39,8 +41,26 @@
 <script setup lang="ts">
 import { useRouter } from 'vue-router'
 import { ref, computed } from 'vue'
+import { ElMessage } from 'element-plus'
 import { routes } from '@/router'
+import { openExcelFill } from '@/api/excelFill'
 const router = useRouter()
+const opening = ref(false)
+
+async function openFill() {
+  if (opening.value) return
+  opening.value = true
+  try {
+    const data = await openExcelFill()
+    if (data?.already) {
+      ElMessage.info('填写窗口已经打开')
+    }
+  } catch (error: unknown) {
+    ElMessage.error(typeof error === 'string' ? error : '打不开填写窗口')
+  } finally {
+    opening.value = false
+  }
+}
 
 const currentRouteOneName = computed(() => {
   const { name, matched } = router.currentRoute.value
@@ -105,6 +125,17 @@ function go(item: any) {
   }
 }
 // 中间
+.layout-header-side{
+  width: 200px;
+  flex: 0 0 200px;
+}
+.layout-header-side-right{
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  padding-right: 20px;
+  box-sizing: border-box;
+}
 .layout-header-center{
   display: flex;
   justify-content: center;

@@ -3,6 +3,36 @@ import sys
 import traceback
 from pathlib import Path
 
+def _run_excel_fill():
+  """打包后的 exe 用这个入口打开填写窗口，不再另找一份 py 脚本。"""
+  if getattr(sys, "frozen", False):
+    log_path = Path(sys.executable).resolve().parent / "excel-fill-error.log"
+  else:
+    log_path = Path("excel-fill-error.log")
+  try:
+    from excel_fill.fill_excel import main
+    main()
+  except Exception:
+    detail = traceback.format_exc()
+    try:
+      log_path.write_text(detail, encoding="utf-8")
+    except Exception:
+      pass
+    try:
+      import tkinter as tk
+      from tkinter import messagebox
+      root = tk.Tk()
+      root.withdraw()
+      messagebox.showerror("填写程序", f"无法打开填写窗口。\n{detail}")
+      root.destroy()
+    except Exception:
+      pass
+    sys.exit(1)
+  sys.exit(0)
+
+if "--excel-fill" in sys.argv:
+  _run_excel_fill()
+
 # PyInstaller windowed 模式下 stdout/stderr 为 None，print / uvicorn 会崩溃，网页服务起不来
 if getattr(sys, "frozen", False):
   _runtime_log = open(

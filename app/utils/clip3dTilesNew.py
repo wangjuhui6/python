@@ -3,6 +3,7 @@ import json
 import shutil
 import struct
 from pathlib import Path
+from urllib.parse import unquote
 
 import numpy as np
 import trimesh
@@ -5623,7 +5624,7 @@ class Clip3dTilesNew:
         uri,
     ):
 
-        return (
+        uri = (
             uri
             .split(
                 "?",
@@ -5634,6 +5635,9 @@ class Clip3dTilesNew:
                 1
             )[0]
         )
+
+        # 根 tileset 把文件夹名里的 + 写成 %2B，磁盘上是 Tile_+021_+012。
+        return unquote(uri)
 
 
 # ====================================================================

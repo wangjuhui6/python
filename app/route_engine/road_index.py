@@ -223,7 +223,7 @@ def ensure_index(pbf):
   return dest
 
 
-def search_places(pbf, query: str, bounds=None):
+def search_places(pbf, query: str, bounds=None, exact=False):
   name = (query or "").replace("\u3000", " ").strip()
   if len(name) < 2:
     return []
@@ -245,7 +245,7 @@ def search_places(pbf, query: str, bounds=None):
         "SELECT name, lng, lat, kind, west, south, east, north, shape FROM place WHERE name = ? LIMIT 800",
         (name,),
       ).fetchall()
-    if not rows:
+    if not rows and not exact:
       like = "%" + name.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_") + "%"
       rows = conn.execute(
         "SELECT name, lng, lat, kind, west, south, east, north, shape FROM place WHERE name LIKE ? ESCAPE '\\' LIMIT 200",
@@ -261,6 +261,37 @@ def search_places(pbf, query: str, bounds=None):
       "label": label,
       "kind": kind or "",
       "bbox": (south, north, west, east),
-      "shape": _parse_shape(shape, lng, lat),
+        "shape": _parse_shape(shape, lng, lat),
     })
+  return found
+
+
+def search_boxes(pbf, boxes, limit=50):
+  # 按一小段路的范围查出可能交会的路，名字必须非空。
+  dest = ensure_index(pbf)
+  conn = _connect(dest, readonly=True)
+  found = []
+  seen = set()
+  try:
+    for west, south, east, north in boxes:
+      rows = conn.execute(
+        "SELECT name, lng, lat, kind, west, south, east, north, shape FROM place "
+        "WHERE name != '' AND east >= ? AND west <= ? AND north >= ? AND south <= ? LIMIT ?",
+        (west, east, south, north, limit),
+      ).fetchall()
+      for label, lng, lat, kind, row_west, row_south, row_east, row_north, shape in rows:
+        key = (label, round(lng, 5), round(lat, 5))
+        if key in seen:
+          continue
+        seen.add(key)
+        found.append({
+          "lng": lng,
+          "lat": lat,
+          "label": label,
+          "kind": kind or "",
+          "bbox": (row_south, row_north, row_west, row_east),
+          "shape": _parse_shape(shape, lng, lat),
+        })
+  finally:
+    conn.close()
   return found

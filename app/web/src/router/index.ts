@@ -34,6 +34,14 @@ export const routes: any[] = [
         component: () => import('../views/data/mbtiles.vue')
       },
       {
+        path: '/data/image-mbtiles',
+        name: 'image-mbtiles',
+        meta: {
+          title: '图片转MBTiles'
+        },
+        component: () => import('../views/data/imageMbtiles.vue')
+      },
+      {
         path: '/data/basemap',
         name: 'basemap',
         meta: {
@@ -56,6 +64,14 @@ export const routes: any[] = [
           title: '记录管理'
         },
         component: () => import('../views/data/record.vue')
+      },
+      {
+        path: '/data/array-table',
+        name: 'array-table',
+        meta: {
+          title: '数组转表格'
+        },
+        component: () => import('../views/data/arrayTable.vue')
       }
     ]
   },
